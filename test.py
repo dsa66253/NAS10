@@ -11,14 +11,14 @@ from torch.autograd import Variable
 from torch.utils.data import Subset
 from torchvision import transforms, datasets
 from data.config import cfg_newnasmodel, cfg_alexnet, folder, cfg_nasmodel as cfg, testDataSetFolder
-from retrainModel import NewNasModel
-from model import Model
-from models.alexnet import Baseline
+from models.retrainModel import NewNasModel
+# from model import Model
+from TsengCode.alexnet import Baseline
 from feature.normalize import normalize
 from feature.make_dir import makeDir
 from feature.utility import  setStdoutToDefault, setStdoutToFile, accelerateByGpuAlgo, get_device
 from feature.random_seed import set_seed_cpu
-
+import json
 
 stdoutTofile = True
 accelerateButUndetermine = True
@@ -109,20 +109,21 @@ def prepareModel(num_classes, kth):
     if args.network == "newnasmodel":
         try :
             #info prepare architecture
-            # os.path.isdir(args.decode_folder)
-            genotype_filename = os.path.join(folder["decode_folder"], args.genotype_file)
-            cell_arch = np.load(genotype_filename)
-            print('Load best alpha for each cells from %s' % (genotype_filename))
-            print(cell_arch)
+            #info load decode json
+            filePath = os.path.join(folder["decode"], "{}th_decode.json".format(kth))
+            f = open(filePath)
+            archDict = json.load(f)
+            
+            print("archDict", archDict)
         except:
-            print("Fail to load architecture from ", genotype_filename)
+            print("Fail to load architecture from ", filePath)
             exit()
             
         try:
             #info prepare model
-            net = NewNasModel(cellArch=cell_arch)
+            net = NewNasModel(cellArch=archDict)
             print("net ", net)
-            modelLoadPath = os.path.join( folder["retrainSavedModel"], "NewNasModel{}_Final.pth".format(kth) )
+            modelLoadPath = os.path.join( folder["retrainSavedModel"], "NewNasModel{}_Final.pt".format(kth) )
             net.load_state_dict( torch.load( modelLoadPath ) )
             net = net.to(device)
             net.eval()
@@ -190,7 +191,7 @@ class TestController:
         with torch.no_grad():
             correct = 0
             total = 0
-            for i, data in enumerate(self.testDataLoader):
+            for i, data in enumerate(tqdm(self.testDataLoader)):
                 images, labels = data
 
                 labels = labels.to(self.device)
@@ -266,20 +267,20 @@ if __name__ == '__main__':
         testC = TestController(cfg, "cuda")
 
         #info test checkpoint model
-        accRecord = {"testAcc":np.array([])}
+        # accRecord = {"testAcc":np.array([])}
         
-        for epoch in range(cfg["epoch"]):
-            net = prepareChekcPointModel(num_classes, kth, epoch)
-            # accAtkthAtEpoch = testCheckPointModel( testDataLoader, net, kth, epoch)
-            accAtkthAtEpoch = testC.test(net)
-            accRecord["testAcc"] = np.append(accRecord["testAcc"], accAtkthAtEpoch.cpu())
-        saveAccLoss(kth, accRecord)
+        # for epoch in range(cfg["epoch"]):
+        #     net = prepareChekcPointModel(num_classes, kth, epoch)
+        #     # accAtkthAtEpoch = testCheckPointModel( testDataLoader, net, kth, epoch)
+        #     accAtkthAtEpoch = testC.test(net)
+        #     accRecord["testAcc"] = np.append(accRecord["testAcc"], accAtkthAtEpoch.cpu())
+        # saveAccLoss(kth, accRecord)
         
         #info test final model
         net = prepareModel(num_classes, kth)
         # printNetWeight(net)
-        
-        last_epoch_val_acc = test(testDataLoader, net)
+        last_epoch_val_acc = testC.test(net)
+        # last_epoch_val_acc = test(testDataLoader, net)
         valList.append(last_epoch_val_acc)
         print('retrain validate accuracy:', valList)
         

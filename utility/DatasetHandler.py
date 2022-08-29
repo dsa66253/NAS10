@@ -16,7 +16,7 @@ from feature.make_dir import makeDir
 from feature.random_seed import set_seed_cpu
 from PIL import ImageFile
 from tqdm import tqdm
-from retrainModel import NewNasModel
+from models.retrainModel import NewNasModel
 # from alexnet import Baseline
 from feature.utility import plot_acc_curve, setStdoutToFile, setStdoutToDefault
 from feature.utility import getCurrentTime, accelerateByGpuAlgo, get_device, plot_loss_curve

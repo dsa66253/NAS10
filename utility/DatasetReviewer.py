@@ -2,7 +2,7 @@ from data.config import cfg_nasmodel as cfg
 import torchvision.transforms as T
 import numpy as np
 import torch
-from datasetPractice import DatasetHandler
+from .DatasetHandler import DatasetHandler
 from data.config import trainDataSetFolder
 from torchvision import datasets
 class DatasetReviewer():

@@ -18,13 +18,13 @@ from feature.split_data import split_data
 from feature.random_seed import set_seed_cpu
 from PIL import ImageFile
 from tqdm import tqdm
-from retrainModel import NewNasModel
-from alexnet import Baseline
+from models.retrainModel import NewNasModel
+from alexnet.alexnet import Baseline
 from feature.utility import plot_acc_curve, setStdoutToFile, setStdoutToDefault
 from feature.utility import getCurrentTime, accelerateByGpuAlgo, get_device, plot_loss_curve
-from datasetPractice import DatasetHandler
+from utility.DatasetHandler import DatasetHandler
 from torchvision import transforms
-from  DatasetReviewer import DatasetReviewer
+from  utility.DatasetReviewer import DatasetReviewer
 import matplotlib.pyplot as plt
 stdoutTofile = True
 accelerateButUndetermine = cfg_newnasmodel["cuddbenchMark"]

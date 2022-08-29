@@ -9,7 +9,7 @@ import math
 import time
 from torchvision import datasets
 from data.config import cfg_nasmodel, cfg_alexnet, trainDataSetFolder
-from models.alexnet import Baseline
+from alexnet.alexnet import Baseline
 # from tensorboardX import SummaryWriter #* how about use tensorbaord instead of tensorboardX
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
@@ -25,9 +25,15 @@ from data.config import epoch_to_drop
 from feature.utility import getCurrentTime, setStdoutToDefault, setStdoutToFile, accelerateByGpuAlgo
 from feature.utility import plot_acc_curve, plot_loss_curve, get_device
 from utility.alphasMonitor import AlphasMonitor
+from  DatasetReviewer import DatasetReviewer
 stdoutTofile = True
 accelerateButUndetermine = False
 recover = False
+
+def printNetGrad(net):
+    for name, para in net.named_parameters():
+        print("grad", name, "\n", para)
+        break
 
 def parse_args():
     parser = argparse.ArgumentParser(description='imagenet nas Training')
@@ -39,7 +45,7 @@ def parse_args():
     parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
     parser.add_argument('--resume_net', default=None, help='resume net for retraining')
     parser.add_argument('--resume_epoch', default=0, type=int, help='resume iter for retraining')
-    parser.add_argument('--weight_decay', default=1e-3, type=float, help='Weight decay for SGD')
+    parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
     parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
     parser.add_argument('--trainDataSetFolder', default='./dataset1/train',
                     help='training data set folder')
@@ -58,7 +64,7 @@ def prepareDataSet():
         print(e)
         exit()
     train_data, val_data = split_data(all_data, 0.2)  # 切訓練集跟驗證集
-    return train_data, val_data
+    return all_data, train_data, val_data
 
 def prepareDataLoader(trainData, valData):
     #info prepare dataloader
@@ -140,10 +146,15 @@ def makeAllDir():
     for folderName in folder:
         print("making folder ", folder[folderName])
         makeDir(folder[folderName])
+        
+def tmpF(net):
+    for netLayerName , netLyaerPara in net.named_parameters():
+        print(netLayerName)
+        print(netLyaerPara.data.sum())
 
         
         
-def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, criterion):
+def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, criterion, writer):
     
     # calculate how many iterations
     epoch_size = math.ceil(len(trainData) / batch_size)#* It should be number of batch per epoch
@@ -154,7 +165,7 @@ def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, crit
     
     # other setting
     # writer = SummaryWriter()
-    writer = SummaryWriter(comment="{}_{}th".format(cfg["name"], kth))
+    # writer = SummaryWriter(comment="{}_{}th".format(cfg["name"], kth))
     print("start to train...")
     
     record_train_loss = np.array([])
@@ -191,11 +202,13 @@ def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, crit
         val_images = val_images.to(device)
         val_labels = val_labels.to(device)
 
+        # print("train_labels","\n", train_labels)
         model_optimizer.zero_grad(set_to_none=True)
         
         # Forward pass
         
         train_outputs = net(train_images)
+        printNetGrad(net)
         # calculate loss
         train_loss = criterion(train_outputs, train_labels)
         # backward pass
@@ -205,8 +218,8 @@ def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, crit
         # print("epoch", epoch, "cfg['start_train_nas_epoch']", cfg['start_train_nas_epoch'])
         # take turns to optimize weight and alphas
         model_optimizer.step()
-
-            
+        print("iteration", iteration)
+        tmpF(net)
         #info recording training process
         # model預測出來的結果 (訓練集)
         _, predicts = torch.max(train_outputs.data, 1)
@@ -275,7 +288,8 @@ def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, crit
             lossRecord = {"train": record_train_loss, "val": record_val_loss}
             saveCheckPoint(kth, epoch, model_optimizer, net, lossRecord, accRecord)
 
-
+        if iteration>=10:
+            break
 
     lossRecord = {"train": record_train_loss, "val": record_val_loss}
     accRecord = {"train": record_train_acc, "val": record_val_acc, "test": record_test_acc}
@@ -344,23 +358,35 @@ if __name__ == '__main__':
 
         #info test
         test = TestController(cfg, device)
-
+        writer = SummaryWriter(log_dir=folder["tensorboard_trainNas"], comment="{}th".format(str(k)))
+        
         print("seed_img {}, seed_weight {} start at ".format(seed_img, seed_weight), getCurrentTime())
         print("training cfg", cfg)
-        trainData, valData = prepareDataSet()
+        allData, trainData, valData = prepareDataSet()
         trainDataLoader, valDataLoader = prepareDataLoader(trainData, valData)
         criterion = prepareLossFunction()
         net = prepareModel()
+        tmpF(net)
         model_optimizer = prepareOpt(net)
-        last_epoch_val_ac, lossRecord, accRecord  = myTrain(k, trainData, trainDataLoader, valDataLoader, net, model_optimizer, criterion)  # 進入model訓練
+        
+        
+        last_epoch_val_ac, lossRecord, accRecord  = myTrain(k, trainData, trainDataLoader, valDataLoader, net, model_optimizer, criterion, writer)  # 進入model訓練
         saveAccLoss(k, lossRecord, accRecord)
         plot_loss_curve(lossRecord, "loss_{}".format(k), folder["pltSavedDir"])
         plot_acc_curve(accRecord, "acc_{}".format(k), folder["pltSavedDir"])
         valList.append(last_epoch_val_ac)
         print('train validate accuracy:', valList)
+        
+        datasetReviewer = DatasetReviewer(batch_size, k, allData, device)
+        datasetReviewer.makeSummary(trainDataLoader, writer, net)
+        datasetReviewer.showReport()
+        
+        writer.close()
+        tmpF(net)
         if stdoutTofile:
             setStdoutToDefault(f)
-        # exit() #* for examine why same initial value will get different trained model
+        
+        exit() #* for examine why same initial value will get different trained model
     print('train validate accuracy:', valList)
         
         

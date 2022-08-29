@@ -14,7 +14,8 @@ deleteDirList = ["./nasSavedModel",
                 "./plot",
                 "./accLoss",
                 "./tensorboard_trainNas",
-                "./tensorboard_retrain"          
+                "./tensorboard_retrain",
+                "./decode"        
                 ]
 
 for folder in deleteDirList:

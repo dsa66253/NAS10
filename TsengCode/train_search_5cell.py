@@ -14,12 +14,12 @@ import math
 import time
 from torchvision import datasets
 from data.config import cfg_nasmodel, cfg_alexnet
-from models.alexnet import Baseline
+from TsengCode.alexnet import Baseline
 # from tensorboardX import SummaryWriter #* how about use tensorbaord instead of tensorboardX
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 import numpy as np
-from models.nas_5cell import NasModel
+# from models.nas_5cell import NasModel
 from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
 import matplotlib.pyplot as plt

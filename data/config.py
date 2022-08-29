@@ -76,10 +76,10 @@ cfg_nasmodel = {
     'clip': False,
     'loc_weight': 1.0,
     'gpu_train': True,
-    'batch_size': 128,
+    'batch_size': 64,
     'start_train_nas_epoch': 4,
     'ngpu': 1,
-    'epoch': 45,
+    'epoch': 100,
     'decay1': 70,
     'decay2': 90,
     'image_size': 128,
@@ -99,7 +99,7 @@ cfg_newnasmodel = {
     'clip': False,
     'loc_weight': 1.0,
     'gpu_train': True,
-    'batch_size': 128,
+    'batch_size': 64,
     'ngpu': 1,
     'epoch': 100,
     'decay1': 70,
@@ -129,7 +129,8 @@ folder = {
     "accLossDir": "./accLoss",
     "log": "./log",
     "tensorboard_trainNas": "./tensorboard_trainNas",
-    "tensorboard_retrain": "./tensorboard_retrain"
+    "tensorboard_retrain": "./tensorboard_retrain",
+    "decode": "./decode"
     
 }
 

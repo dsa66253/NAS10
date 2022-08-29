@@ -15,7 +15,7 @@ import math
 import time
 from torchvision import datasets
 from data.config import cfg_nasmodel, cfg_alexnet
-from models.alexnet import Baseline
+from TsengCode.alexnet import Baseline
 from tensorboardX import SummaryWriter
 from torchvision import transforms
 import numpy as np

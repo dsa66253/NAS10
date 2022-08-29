@@ -2,8 +2,10 @@ from __future__ import print_function
 import math
 import os
 import sys
+from unicodedata import east_asian_width
 import torch
 import torch.optim as optim
+from test import TestController
 # import torch.backends.cudnn as cudnn
 import argparse
 from torch import nn
@@ -18,11 +20,17 @@ from feature.split_data import split_data
 from feature.random_seed import set_seed_cpu
 from PIL import ImageFile
 from tqdm import tqdm
-from retrainModel import NewNasModel
-from alexnet import Baseline
-from feature.utility import plot_acc_curve, setStdoutToFile, setStdoutToDefault
-from feature.utility import getCurrentTime, accelerateByGpuAlgo, get_device, plot_loss_curve
+from models.retrainModel import NewNasModel
+from alexnet.alexnet import Baseline
+from utility.AccLossMonitor import AccLossMonitor
+from feature.utility import setStdoutToFile, setStdoutToDefault
+from feature.utility import getCurrentTime, accelerateByGpuAlgo, get_device
 import matplotlib.pyplot as plt
+from utility.DatasetHandler import DatasetHandler
+from torchvision import transforms
+from  utility.DatasetReviewer import DatasetReviewer
+import json 
+from utility.HistDrawer import HistDrawer
 # from train_nas_5cell import prepareDataloader
 stdoutTofile = True
 accelerateButUndetermine = cfg_newnasmodel["cuddbenchMark"]
@@ -61,17 +69,13 @@ def saveAccLoss(kth, lossRecord, accRecord):
         print(e)
 def prepareDataSet():
     #info prepare dataset
-    print('Loading Dataset from {} with seed_img {}'.format(trainDataSetFolder, str(seed_img)))
-    train_transforms = normalize(seed_img, cfg['image_size'])  # 正規化照片
-    try:
-        all_data = datasets.ImageFolder(trainDataSetFolder, transform=train_transforms)
-        print("all_data.class_to_idx", all_data.class_to_idx)
-    except Exception as e:
-        print("Fail to load data set from: ",  trainDataSetFolder)
-        print(e)
-        exit()
-    train_data, val_data = split_data(all_data, 0.2)  # 切訓練集跟驗證集
-    return train_data, val_data
+    datasetHandler = DatasetHandler(trainDataSetFolder, cfg, seed_img)
+    datasetHandler.addAugmentDataset(transforms.RandomHorizontalFlip(p=1))
+    # datasetHandler.addAugmentDataset(transforms.RandomRotation(degrees=10))
+    print("training dataset set size:", len(datasetHandler.getTrainDataset()))
+    print("val dataset set size:", len(datasetHandler.getValDataset()))
+    
+    return datasetHandler.getTrainDataset(), datasetHandler.getValDataset()
 
 def prepareDataLoader(trainData, valData):
     #info prepare dataloader
@@ -86,34 +90,24 @@ def prepareLossFunction():
     print('Preparing loss function...')
     return  nn.CrossEntropyLoss()
 
-def prepareModel():
-    #info check decode alphas and load it
-    if os.path.isdir(folder["decode_folder"]):
-        try:
-            genotype_filename = os.path.join(folder["decode_folder"], args.genotype_file)
-            cell_arch = np.load(genotype_filename)
-            print("successfully load decode alphas")
-        except:
-            print("Fail to load decode alpha")
-    else:
-        print('decode_folder does\'t exist!')
-        sys.exit(0)
+def prepareModel(kth):
+    #info load decode json
+    filePath = os.path.join(folder["decode"], "{}th_decode.json".format(kth))
+    f = open(filePath)
+    archDict = json.load(f)
         
     #info prepare model
     print("Preparing model...")
-    if cfg['name'] == 'NewNasModel':
-        # set_seed_cpu(seed_weight) #* have already set seed in main function 
-        net = NewNasModel(cellArch=cell_arch)
-        net.train()
-        net = net.to(device)
-        print("net.cellArchTrans:", net.cellArchTrans)
-        print("net", net)
+    net = NewNasModel(cellArch=archDict)
+    net.train()
+    net = net.to(device)
+    print("net.cellArch:", net.cellArch)
+    print("net", net)
     return net
 def prepareOpt(net):
     return optim.SGD(net.parameters(), lr=initial_lr, momentum=momentum,
                     weight_decay=weight_decay)  # 是否采取 weight_decay
-    
-    
+
 def saveCheckPoint(kth, epoch, optimizer, net, lossRecord, accReocrd):
     makeDir(folder["savedCheckPoint"])
     print("save check point kth {} epoch {}".format(kth, epoch))
@@ -161,17 +155,35 @@ def tmpF(net):
     for netLayerName , netLyaerPara in net.named_parameters():
         print(netLayerName)
         print(netLyaerPara.data.sum())
-
-        
-def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer, criterion):
-    print("start train kth={}...".format(kth))
+        break
+def weightCount(net):
+    count = 0
+    for netLayerName , netLyaerPara in net.named_parameters():
+        print(netLyaerPara.device)
+        shape = netLyaerPara.shape
+        dim=1
+        for e in shape:
+            dim = e*dim
+        count = count + dim
+    return count
+def gradCount(net):
+    count = 0
+    for netLayerName , netLyaerPara in net.named_parameters():
+        if netLyaerPara.grad!=None:
+            shape = netLyaerPara.grad.shape
+            dim=1
+            for e in shape:
+                dim = e*dim
+            count = count + dim
+    return count
+def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer, criterion, writer):
     global last_epoch_val_acc #?幹嘛用
     ImageFile.LOAD_TRUNCATED_IMAGES = True#* avoid damage image file
 
 
     # print("Training with learning rate = %f, momentum = %f, lambda = %f " % (initial_lr, momentum, weight_decay))
     #info other setting
-    writer = SummaryWriter(log_dir=folder["tensorboard_retrain"], comment="{}th".format(str(kth)))
+    
     
     epoch_size = math.ceil(len(trainData) / batch_size)#* It should be number of batch per epoch
     max_iter = cfg['epoch'] * epoch_size #* it's correct here. It's the totoal iterations.
@@ -180,109 +192,119 @@ def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer
     step_index = 0
     start_iter = 0
     epoch = 0
+    # other setting
+    print("start to train...")
+    
     record_train_loss = np.array([])
     record_val_loss = np.array([])
     record_train_acc = np.array([])
     record_val_acc = np.array([])
-    print('Start to train...')
+    record_test_acc = np.array([])
 
     #info start training loop
     for iteration in tqdm(range(start_iter, max_iter), unit =" iterations on {}".format(kth)):
-        
         #info things need to do per epoch
-        
         if iteration % epoch_size == 0:
-            print("start training epoch{}...".format(epoch))
             if (iteration != 0):
                 epoch = epoch + 1
             else:
                 if recover:
                     net, model_optimizer, epoch, lossRecord, accRecord = recoverFromCheckPoint(kth, epoch, net, model_optimizer)
-
-            accRecord = {"train": record_train_acc, "val": record_val_acc}
-            lossRecord = {"train": record_train_loss, "val": record_val_loss}
-            saveCheckPoint(kth, epoch, model_optimizer, net, lossRecord, accRecord)
+            
+            print("start training epoch{}...".format(epoch))
+            
             train_batch_iterator = iter(trainDataLoader)
-
-        # lr = adjust_learning_rate(optimizer, gamma, epoch, step_index, iteration, epoch_size)
+            
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
         train_images, train_labels = next(train_batch_iterator)
         val_batch_iterator = iter(valDataLoader)
         val_images, val_labels = next(val_batch_iterator)
-        # plot_img(train_images, train_labels, val_images, val_labels)
-        train_images, train_labels = train_images.to(device), train_labels.to(device)
-        val_images, val_labels = val_images.to(device), val_labels.to(device)
-        # print("train_labels","\n", train_labels)
         
-        # forward pass
-        train_outputs = net(train_images)
-        printNetGrad(net)
-        # calculate loss
-        train_loss = criterion(train_outputs, train_labels)
-        # backward pass
-        model_optimizer.zero_grad(set_to_none=True)
-        train_loss.backward()
-        # update weight
-        model_optimizer.step()
-        print("iteration", iteration)
-        tmpF(net)
+        train_images = train_images.to(device)
+        train_labels = train_labels.to(device)
+        val_images = val_images.to(device)
+        val_labels = val_labels.to(device)
 
+        # print("================111")
+        model_optimizer.zero_grad(set_to_none=True)
+        #info forward pass
+        train_outputs = net(train_images)
+        #info calculate loss
+        train_loss = criterion(train_outputs, train_labels)
+        #info backward pass
+        # print(torch.cuda.memory_allocated(device=device))
+        # print(torch.cuda.memory_summary(device=device) )
+        # print("weightCount ", weightCount(net))
+        # print("gradCount ", gradCount(net))
+        train_loss.backward()
+        # print(torch.cuda.memory_summary(device=device) )
+        # print("weightCount ", weightCount(net))
+        # print("gradCount ", gradCount(net))
+        # exit()
+        # while True:
+        #     pass
+        #info update weight
+        model_optimizer.step()
+
+        # printNetGrad(net)
+        # printNetWeight(net)
+        # print("================")
+        #info do statistics after this epoch
         if iteration % epoch_size == 0:
             with torch.no_grad():
-                #info recording training accruacy
-                _, predicts = torch.max(train_outputs.data, 1)
-                record_train_loss = np.append(record_train_loss, train_loss.item())
-
+                #info validation data forward pass
                 val_outputs = net(val_images)
                 _, predicts_val = torch.max(val_outputs.data, 1)
                 val_loss = criterion(val_outputs, val_labels)
                 record_val_loss = np.append(record_val_loss, val_loss.item())
-
-
-                # 計算訓練集準確度
-                total_images = 0
-                correct_images = 0
-                total_images += train_labels.size(0)
-                correct_images += (predicts == train_labels).sum()
-
-                # 計算驗證集準確度
-                total_images_val = 0
-                correct_images_val = 0
-                total_images_val += val_labels.size(0)
-                correct_images_val += (predicts_val == val_labels).sum()
-
-            trainAcc = correct_images / total_images
-            valAcc = correct_images_val / total_images_val
+            
+            #info calculate training data acc and loss 
+            _, predicts = torch.max(train_outputs.data, 1)
+            record_train_loss = np.append(record_train_loss, train_loss.item())
+            total_images = 0
+            correct_images = 0
+            total_images += train_labels.size(0)
+            correct_images += (predicts == train_labels).sum()
+            trainAcc = correct_images / total_images * 100
             record_train_acc = np.append(record_train_acc, trainAcc.cpu())
+            
+            #info calculate validation data acc and loss 
+            total_images_val = 0
+            correct_images_val = 0
+            total_images_val += val_labels.size(0)
+            correct_images_val += (predicts_val == val_labels).sum()
+            valAcc = correct_images_val / total_images_val *100
             record_val_acc = np.append(record_val_acc, valAcc.cpu())
-            writer.add_scalar('Train_Loss', train_loss.item(), iteration + 1)
-            writer.add_scalar('Val_Loss', val_loss.item(), iteration + 1)
-            writer.add_scalar('train_Acc', 100 * trainAcc, iteration + 1)
-            writer.add_scalar('val_Acc', 100 * valAcc, iteration + 1)
+            
+            #info record acc an loss
+            # writer.add_scalar('Train_Loss/k='+str(kth), train_loss.item(), epoch)
+            # writer.add_scalar('Val_Loss/k='+str(kth), val_loss.item(), epoch)
+            # writer.add_scalar('train_Acc/k='+str(kth), trainAcc, epoch)
+            # writer.add_scalar('val_Acc/k='+str(kth), valAcc, epoch)
             last_epoch_val_acc = 100 * correct_images_val / total_images_val
-        if iteration>=10:
-            break
-    # images, _ = next(iter(trainDataLoader))
-    # writer.add_graph(net, images.to(device))
+        # exit()
+        # if iteration>=10:
+        #     break
 
     lossRecord = {"train": record_train_loss, "val": record_val_loss}
     accRecord = {"train": record_train_acc, "val": record_val_acc}
-    torch.save(net.state_dict(), os.path.join(folder["retrainSavedModel"], cfg['name'] + str(kth) + '_Final.pth'))
+    torch.save(net.state_dict(), os.path.join(folder["retrainSavedModel"], cfg['name'] + str(kth) + '_Final.pt'))
     return last_epoch_val_acc, lossRecord, accRecord
 
 
 if __name__ == '__main__':
     device = get_device()
+    torch.device(device)
     print("running on device: {}".format(device))
     torch.set_printoptions(precision=6, sci_mode=False, threshold=1000)
     torch.set_default_dtype(torch.float32) #* torch.float will slow the training speed
     valList = []
 
-    for k in range(3):
+    for k in range(0, 3):
         #info handle stdout to a file
         if stdoutTofile:
             f = setStdoutToFile(folder["log"]+"/retrain_5cell_{}th.txt".format(str(k)))
-            
-        accelerateByGpuAlgo(cfg_newnasmodel["cuddbenchMark"])
+        
         #info set seed
         if k == 0:
             seed_img = 10
@@ -293,8 +315,10 @@ if __name__ == '__main__':
         else:
             seed_img = 830
             seed_weight = 953
+            
+        accelerateByGpuAlgo(cfg_newnasmodel["cuddbenchMark"])
+        set_seed_cpu(seed_weight)
         #! test same initial weight
-        ImageFile.LOAD_TRUNCATED_IMAGES = True
         args = parse_args(str(k))
         makeAllDir()
         
@@ -315,36 +339,39 @@ if __name__ == '__main__':
         initial_lr = args.lr
         gamma = args.gamma
 
-        set_seed_cpu(seed_weight)
+        
+        #info test
+        test = TestController(cfg, device)
+        # writer = SummaryWriter(log_dir=folder["tensorboard_retrain"], comment="{}th".format(str(k)))
         
         print("seed_img{}, seed_weight{} start at ".format(seed_img, seed_weight), getCurrentTime())
         print("cfg", cfg)
+        
+        #info training process 
         trainData, valData = prepareDataSet()
         trainDataLoader, valDataLoader = prepareDataLoader(trainData, valData)
         criterion = prepareLossFunction()
-        net = prepareModel()
-        # alexnet = Baseline(10)f
-        # alexnet.train()
-        # alexnet.to(device)
-        # # printNetWeight(net)
-        tmpF(net)
+        net = prepareModel(k)
+        histDrawer = HistDrawer(folder["pltSavedDir"])
+        histDrawer.drawNetConvWeight(net, tag="ori")
         model_optimizer = prepareOpt(net)
-        last_epoch_val_ac, lossRecord, accRecord = myTrain(k, trainData, trainDataLoader, valDataLoader, net, model_optimizer, criterion)  # 進入model訓練
         
+        last_epoch_val_ac, lossRecord, accRecord = myTrain(k, trainData, trainDataLoader, valDataLoader, net, model_optimizer, criterion, writer=None)  # 進入model訓練
+        histDrawer.drawNetConvWeight(net, tag="trained")
         #info record training processs
-        plot_loss_curve(lossRecord, "loss_{}".format(k), folder["pltSavedDir"])
-        plot_acc_curve(accRecord, "acc_{}".format(k), folder["pltSavedDir"])
-        saveAccLoss(k, lossRecord, accRecord)
+        alMonitor = AccLossMonitor(k, folder["pltSavedDir"], folder["accLossDir"], trainType="retrain")
+        alMonitor.plotAccLineChart(accRecord)
+        alMonitor.plotLossLineChart(lossRecord)
+        alMonitor.saveAccLossNp(accRecord, lossRecord)
+
         valList.append(last_epoch_val_ac)
         print('retrain validate accuracy:', valList)
         
+        # writer.close()
         #info handle output file
-        print('retrain validate accuracy:', valList)
-        tmpF(net)
         if stdoutTofile:
             setStdoutToDefault(f)
             
-        exit()
     print('retrain validate accuracy:', valList)
 
 

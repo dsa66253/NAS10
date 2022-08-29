@@ -10,7 +10,7 @@ import time
 from torchvision import datasets
 import torchvision.transforms as T
 from data.config import cfg_nasmodel, cfg_alexnet, trainDataSetFolder
-from models.alexnet import Baseline
+from alexnet.alexnet import Baseline
 # from tensorboardX import SummaryWriter #* how about use tensorbaord instead of tensorboardX
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
@@ -27,9 +27,11 @@ from feature.utility import getCurrentTime, setStdoutToDefault, setStdoutToFile,
 from feature.utility import plot_acc_curve, plot_loss_curve, get_device
 from utility.alphasMonitor import AlphasMonitor
 # from utility.TransformImgTester import TransformImgTester
-from datasetPractice import DatasetHandler
+from utility.DatasetHandler import DatasetHandler
 from torchvision import transforms
-from  DatasetReviewer import DatasetReviewer
+from  utility.DatasetReviewer import DatasetReviewer
+from utility.AccLossMonitor import AccLossMonitor
+import json
 stdoutTofile = True
 accelerateButUndetermine = False
 recover = False
@@ -74,6 +76,11 @@ def prepareLossFunction():
     return  nn.CrossEntropyLoss()
 
 def prepareModel():
+    #info load decode json
+    filePath = os.path.join("models", "simpleArch.json")
+    f = open(filePath)
+    archDict = json.load(f)
+
     #info prepare model
     print("Preparing model...")
     if cfg['name'] == 'alexnet':
@@ -84,7 +91,7 @@ def prepareModel():
     elif cfg['name'] == 'NasModel':
         # nas model
         # todo why pass no parameter list to model, and we got cfg directly in model.py from config.py
-        net = Model()
+        net = Model(archDict)
         print("net", net)
         #! move to cuda before assign net's parameters to optim, otherwise, net on cpu will slow down training speed
         net = net.to(device)
@@ -149,20 +156,40 @@ def makeAllDir():
         print("making folder ", folder[folderName])
         makeDir(folder[folderName])
 
+def weightCount(net):
+    count = 0
+    for netLayerName , netLyaerPara in net.named_parameters():
+        print(netLyaerPara.device)
+        shape = netLyaerPara.shape
+        dim=1
+        for e in shape:
+            dim = e*dim
+        count = count + dim
+    return count
+def gradCount(net):
+    count = 0
+    for netLayerName , netLyaerPara in net.named_parameters():
+        if netLyaerPara.grad!=None:
+            shape = netLyaerPara.grad.shape
+            dim=1
+            for e in shape:
+                dim = e*dim
+            count = count + dim
+    return count
         
         
 def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, nas_optimizer, criterion, writer):
     
     # calculate how many iterations
     epoch_size = math.ceil(len(trainData) / batch_size)#* It should be number of batch per epoch
-    max_iter = max_epoch * epoch_size #* it's correct here. It's the totoal iterations.
+    max_iter = cfg['epoch'] * epoch_size #* it's correct here. It's the totoal iterations.
     #* an iteration go through a mini-batch(aka batch)
     stepvalues = (cfg['decay1'] * epoch_size, cfg['decay2'] * epoch_size)
     step_index = 0
     start_iter = 0
     epoch = 0
     
-    # other settin
+    # other setting
     print("start to train...")
     
     record_train_loss = np.array([])
@@ -184,12 +211,11 @@ def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, nas_
                 if recover:
                     net, model_optimizer, epoch, lossRecord, accRecord = recoverFromCheckPoint(kth, epoch, net, model_optimizer)
             print("start training epoch{}...".format(epoch))
-            
+            #! why this will be recreate per epoch, need to be fixed
             accRecord = {"train": record_train_acc, "val": record_val_acc, "test": record_test_acc}
             lossRecord = {"train": record_train_loss, "val": record_val_loss}
-
-            # net.saveAlphas(epoch, kth)
-            train_batch_iterator = iter(train_loader)
+            
+            #info handle alpha operation 
             if epoch in epoch_to_drop:
                 # pass
                 net.dropMinAlpha()
@@ -199,13 +225,12 @@ def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, nas_
                 net.normalizeAlphas()
                 # net.normalizeByDivideSum()
                 # net.saveMask(epoch, kth)
+            
+            train_batch_iterator = iter(train_loader)
 
         load_t0 = time.time()
-        # if epoch >= cfg['start_train_nas_epoch']:
-        #     net.filtAlphas()
-        #     net.normalizeAlphas()
         
-        
+
 
         # load train data
         ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -218,26 +243,35 @@ def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, nas_
         val_images = val_images.to(device)
         val_labels = val_labels.to(device)
 
+
         model_optimizer.zero_grad(set_to_none=True)
         nas_optimizer.zero_grad(set_to_none=True)
         
-        # Forward pass
         alphaMonitor.logAlphaDictPerIter(net, iteration)
-        
+        #info Forward pass
         train_outputs = net(train_images)
-        # calculate loss
+        #info calculate loss
         train_loss = criterion(train_outputs, train_labels)
-        # backward pass
+        #info backward pass
+        # print("weightCount ", weightCount(net))
+        # print("gradCount ", gradCount(net))
+        # val = input("Enter ")
         train_loss.backward()
+        # val = input("Enter ")
+
+        # print("increase mem", torch.cuda.memory_allocated(device=device)-mem)
+        # print("weightCount ", weightCount(net))
+        # print("gradCount ", gradCount(net))
+
         # print("epoch >= cfg['start_train_nas_epoch']", epoch >= cfg['start_train_nas_epoch'])
         # print("(epoch - cfg['start_train_nas_epoch']) % 2 == 0", (epoch - cfg['start_train_nas_epoch']) % 2 == 0)
         # print("epoch", epoch, "cfg['start_train_nas_epoch']", cfg['start_train_nas_epoch'])
         # alphaMonitor.logAlphasGradPerIteration(net, iteration)
-        #info
 
         # train_transform_images = rotater(train_images)
         # train_transform_outputs = net(train_transform_images)
         # take turns to optimize weight and alphas
+        #info update weight
         if epoch >= cfg['start_train_nas_epoch']:
             if (epoch - cfg['start_train_nas_epoch']) % 2 == 0:
                 nas_optimizer.step()
@@ -249,31 +283,38 @@ def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, nas_
             
         #info recording training process
         # model預測出來的結果 (訓練集)
-        _, predicts = torch.max(train_outputs.data, 1)
         # record_train_loss.append(train_loss.item())
         # _, predictsTransform = torch.max(train_transform_outputs.data, 1)
         # coincident_output = (predicts == predictsTransform)
         #! Why she use validation directly at the end of an iteration.
         #! Usually we use validation after finishing all training.
         #! And chose the model generate with best accuracy on validation set
-        #info after training this epoch
+        #info do statistics after this epoch
         if (iteration % epoch_size == 0):
-            val_outputs = net(val_images)
-            _, predicts_val = torch.max(val_outputs.data, 1)
+            with torch.no_grad():
+                #info validation data forward pass
+                val_outputs = net(val_images)
+                _, predicts_val = torch.max(val_outputs.data, 1)
+                val_loss = criterion(val_outputs, val_labels)
+                record_val_loss = np.append(record_val_loss, val_loss.item())
+            #info calculate training data acc and loss 
+            _, predicts = torch.max(train_outputs.data, 1)
             record_train_loss = np.append(record_train_loss, train_loss.item())
-            val_loss = criterion(val_outputs, val_labels)
-            record_val_loss = np.append(record_val_loss, val_loss.item())
-            # print("end iteration", iteration, " net.Alphas", net.alphas)
-            # 計算訓練集準確度
             total_images = 0
             correct_images = 0
             total_images += train_labels.size(0)
             correct_images += (predicts == train_labels).sum()
-            # 計算驗證集準確度
+            trainAcc = correct_images / total_images * 100
+            record_train_acc = np.append(record_train_acc, trainAcc.cpu())
+            
+            #info calculate validation data acc and loss 
             total_images_val = 0
             correct_images_val = 0
             total_images_val += val_labels.size(0)
             correct_images_val += (predicts_val == val_labels).sum()
+            valAcc = correct_images_val / total_images_val *100
+            record_val_acc = np.append(record_val_acc, valAcc.cpu())
+
 
             load_t1 = time.time()
             batch_time = load_t1 - load_t0
@@ -293,22 +334,16 @@ def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, nas_
             #                 100 * correct_images.item() / total_images,
             #                 100 * correct_images_val.item() / total_images_val,
             #                 0.02, batch_time, str(datetime.timedelta(seconds=eta))))
-
-            #info 使用tensorboard紀錄LOSS、ACC            
-            trainAcc = correct_images / total_images
-            valAcc = correct_images_val / total_images_val
-            record_train_acc = np.append(record_train_acc, trainAcc.cpu())
-            record_val_acc = np.append(record_val_acc, valAcc.cpu())
-            
+            #info record to tensorboard
             writer.add_scalar('Train_Loss/k='+str(kth), train_loss.item(), epoch)
             writer.add_scalar('Val_Loss/k='+str(kth), val_loss.item(), epoch)
-            writer.add_scalar('train_Acc/k='+str(kth), 100 * trainAcc, epoch)
-            writer.add_scalar('val_Acc/k='+str(kth), 100 * valAcc, epoch)
-            writer.add_scalar('test_Acc/k='+str(kth), 100 * testAcc, epoch)
+            writer.add_scalar('train_Acc/k='+str(kth), trainAcc, epoch)
+            writer.add_scalar('val_Acc/k='+str(kth), valAcc, epoch)
+            writer.add_scalar('test_Acc/k='+str(kth), testAcc, epoch)
             accToTensorBoard = {
-                "trainAcc": 100 * trainAcc,
-                "valAcc": 100 * valAcc,
-                "testAcc": 100 * testAcc,
+                "trainAcc": trainAcc,
+                "valAcc": valAcc,
+                "testAcc": testAcc,
             }
             writer.add_scalars('Acc/k='+str(kth), accToTensorBoard, epoch)
             last_epoch_val_acc = 100 * correct_images_val / total_images_val
@@ -351,13 +386,13 @@ def myTrain(kth, trainData, train_loader, val_loader, net, model_optimizer, nas_
             
             # writer.add_images('my_image_batch1', tmp1, 0)
             #info save checkpoint model
-            accRecord = {"train": record_train_acc, "val": record_val_acc, "test": record_test_acc}
-            lossRecord = {"train": record_train_loss, "val": record_val_loss}
-            if epoch%3==0:
-                pass
+            # accRecord = {"train": record_train_acc, "val": record_val_acc, "test": record_test_acc}
+            # lossRecord = {"train": record_train_loss, "val": record_val_loss}
+            # if epoch%3==0:
+            #     pass
                 # saveCheckPoint(kth, epoch, model_optimizer, net, lossRecord, accRecord)
         # transformImgTest.compare(net, train_images, predicts, train_labels, writer, iteration)
-        # if iteration>=50:
+        # if iteration>=3:
         #     break
 
 
@@ -420,7 +455,6 @@ if __name__ == '__main__':
         img_dim = cfg['image_size']
         num_gpu = cfg['ngpu']
         batch_size = cfg['batch_size']
-        max_epoch = cfg['epoch']
         gpu_train = cfg['gpu_train']
 
         num_workers = args.num_workers
@@ -442,15 +476,16 @@ if __name__ == '__main__':
         trainDataLoader, valDataLoader = prepareDataLoader(trainData, valData)
         criterion = prepareLossFunction()
         net = prepareModel()
+
         model_optimizer, nas_optimizer = prepareOpt(net)
         last_epoch_val_ac, lossRecord, accRecord  = myTrain(k, trainData, trainDataLoader, valDataLoader, net, model_optimizer, nas_optimizer, criterion, writer)  # 進入model訓練
-        saveAccLoss(k, lossRecord, accRecord)
-        plot_loss_curve(lossRecord, "loss_{}".format(k), folder["pltSavedDir"])
-        plot_acc_curve(accRecord, "acc_{}".format(k), folder["pltSavedDir"])
+        #info record training processs
+        alMonitor = AccLossMonitor(k, folder["pltSavedDir"], folder["accLossDir"], trainType="Nas")
+        alMonitor.plotAccLineChart(accRecord)
+        alMonitor.plotLossLineChart(lossRecord)
+        alMonitor.saveAccLossNp(accRecord, lossRecord)
         valList.append(last_epoch_val_ac)
         print('train validate accuracy:', valList)
-        
-        
         
         datasetReviewer = DatasetReviewer(cfg["batch_size"],
                                         k,
