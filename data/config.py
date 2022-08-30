@@ -1,6 +1,6 @@
 # config.py
 from joblib import PrintTime
-datasetRoot = "../dataset"
+datasetRoot = "../dataset2"
 trainDataSetFolder = datasetRoot+"/train"
 testDataSetFolder = datasetRoot+"/test"
 PRIMITIVES = [
@@ -76,7 +76,7 @@ cfg_nasmodel = {
     'clip': False,
     'loc_weight': 1.0,
     'gpu_train': True,
-    'batch_size': 64,
+    'batch_size': 128,
     'start_train_nas_epoch': 4,
     'ngpu': 1,
     'epoch': 100,
@@ -99,7 +99,7 @@ cfg_newnasmodel = {
     'clip': False,
     'loc_weight': 1.0,
     'gpu_train': True,
-    'batch_size': 64,
+    'batch_size': 128,
     'ngpu': 1,
     'epoch': 100,
     'decay1': 70,

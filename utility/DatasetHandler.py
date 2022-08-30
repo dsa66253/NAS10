@@ -37,6 +37,7 @@ class DatasetHandler():
         self.originalTrainDataset, self.originalValDataset = self.split_data(self.originalData, 0.2)
         self.trainDataset = self.originalTrainDataset
         self.augmentDatasetList.append(self.originalTrainDataset)
+        print("trainDataSetFolder", trainDataSetFolder)
     def split_data(self, all_data, ratio=0.2):
         n = len(all_data)  # total number of examples
         n_val = int(ratio * n)  # take ~10% for val

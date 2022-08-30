@@ -29,9 +29,10 @@ from utility.alphasMonitor import AlphasMonitor
 # from utility.TransformImgTester import TransformImgTester
 from utility.DatasetHandler import DatasetHandler
 from torchvision import transforms
-from  utility.DatasetReviewer import DatasetReviewer
+from utility.DatasetReviewer import DatasetReviewer
 from utility.AccLossMonitor import AccLossMonitor
 import json
+from models.arch import simpleArch
 stdoutTofile = True
 accelerateButUndetermine = False
 recover = False
@@ -77,9 +78,9 @@ def prepareLossFunction():
 
 def prepareModel():
     #info load decode json
-    filePath = os.path.join("models", "simpleArch.json")
-    f = open(filePath)
-    archDict = json.load(f)
+    # filePath = os.path.join("models", "simpleArch.json")
+    # f = open(filePath)
+    # archDict = json.load(f)
 
     #info prepare model
     print("Preparing model...")
@@ -91,7 +92,7 @@ def prepareModel():
     elif cfg['name'] == 'NasModel':
         # nas model
         # todo why pass no parameter list to model, and we got cfg directly in model.py from config.py
-        net = Model(archDict)
+        net = Model(simpleArch)
         print("net", net)
         #! move to cuda before assign net's parameters to optim, otherwise, net on cpu will slow down training speed
         net = net.to(device)

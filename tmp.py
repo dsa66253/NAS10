@@ -1,70 +1,105 @@
-from os import listdir
-from os.path import isfile, join
+import matplotlib.pyplot as plt
+from matplotlib.pyplot import figure
+import numpy as np
 import os
-import torch
-from  models.mymodel import InnerCell, Layer, Model
 
-'''
-pick up 140 image from training set to test set
-'''
-def getAllFileName(dirPath):
-    return [f for f in listdir(dirPath) if isfile(join(dirPath, f))]
-def deleteFile(filePath):
-    if os.path.exists(filePath):
-        os.remove(filePath)
-def moveFile(sourceDir, desDir, fileName):
-    sourcePath = os.path.join(sourceDir, fileName)
-    desPath = os.path.join(desDir, fileName)
-    os.rename(sourcePath, desPath)
-if __name__=="__main__":
-    print(torch.cuda.is_available())
-
-    torch.manual_seed(10)
-    input = torch.rand(3, 3, 128, 128)
-    net = Model()
-    output = net(input)
-    output = output.sum()
-    output.backward()
-    # output = net(input)
-    # print(.shape)
-    exit()
-
-
-
-    torch.manual_seed(10)
-    input = torch.rand(3, 3, 64, 64)
-    net = Layer(1, 0, 3, 96, 1, 1, [0, 1],  "testLayer")
-    output = net(input)
-    output = output.sum()
-    output.backward()
-    output = net(input)
-    # print(.shape)
-    exit()
-
-
-
-
-
-    torch.manual_seed(10)
-    input = torch.rand(3, 3, 64, 64)
-    innercell = InnerCell(3, 96, 1, None, "testLayer")
-    output = innercell(input)
-    output = output.sum()
-    output.backward()
-    output = innercell(input)
-    # print(.shape)
-    exit()
-
-
-
-    sourceDir = "../dataset/train"
-    desDir = "../dataset/test"
-
-    sourceClassDirList = [x[0] for x in os.walk("../dataset/train")][1:]
-    desClassDirList = [x[0] for x in os.walk("../dataset/test")][1:]
-    for i in range(len(sourceClassDirList)):
-        fileList = getAllFileName(sourceClassDirList[i])
-        for j in range(140):
-            # pass
-            moveFile(sourceClassDirList[i], desClassDirList[i], fileList[j])
+def plot_loss_curve(lossRecord, title='default', saveFolder="./"):
+    ''' Plot learning curve of your DNN (train & dev loss) '''
+    figure(figsize=(6, 4))
+    plt.plot(lossRecord['train'], c='tab:red', label='train')
+    plt.plot(lossRecord['val'], c='tab:cyan', label='val')
+    plt.xlabel('epoch')
+    plt.ylabel('loss')
+    plt.title('Loss of {}'.format(title))
+    plt.legend()
     
+    plt.savefig(os.path.join(saveFolder, title))
+
+def plot_acc_curve(accRecord, title='default', saveFolder="./"):
+    ''' Plot learning curve of your DNN (train & dev loss) '''
+    fig, ax = plt.subplot()
+    ax.plot(accRecord['train'], c='tab:red', label='train')
+    ax.plot(accRecord['val'], c='tab:cyan', label='val')
+    try:
+        ax.plot(accRecord['test'], c='tab:brown', label='test')
+    except Exception as e:
+        print("null accRecord['test']", e)
+    ax.set_xlabel('epoch')
+    ax.set_ylabel('acc')
+    ax.set_title(format(title))
+    ax.legend()
+    # plt.show()
+    plt.savefig(os.path.join(saveFolder, title)) 
+def plot_acc_curves(accRecord, ax, title='default', saveFolder="./"):
+    ''' Plot learning curve of your DNN (train & dev loss) '''
+    totalEpoch = len(accRecord["train"])
+    ax.plot(accRecord['train'], c='tab:red', label='train')
+    ax.plot(accRecord['val'], c='tab:cyan', label='val')
+    
+    try:
+        ax.plot(accRecord['test'], c='tab:brown', label='test')
+    except Exception as e:
+        print("null accRecord['test']", e)
+    ax.yaxis.grid()
+    ax.xaxis.grid()
+    ax.set_yticks(range(0, 110, 10))
+    ax.set_xticks(range(0, totalEpoch, 10))
+    ax.set_xlabel('epoch')
+    ax.set_ylabel('acc')
+    ax.set_title(format(title))
+    ax.legend()
+def plot_combined_acc(folder = "./accLoss", title='combine', saveFolder="./plot", trainType="Nas"):
+    
+    fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True, constrained_layout=True)
+    for kth in range(3):
+        trainNasTrainAccFile = os.path.join(folder, "{}_train_acc_{}.npy".format(trainType, str(kth)) )
+        trainNasnValAccFile = os.path.join( folder,"{}_val_acc_{}.npy".format(trainType, str(kth)) )
+        # testAccFile = os.path.join(folder, "trainNasTestAcc_{}.npy".format(trainType, str(kth)) )
+        
+        
+        accRecord = {
+            "train": np.load(trainNasTrainAccFile),
+            "val": np.load(trainNasnValAccFile),
+            # "test": np.load(testAccFile)
+            }
+        plot_acc_curves(accRecord, axs[kth], "acc_"+str(kth), "./plot")
+    fileName = trainType+"_"+title
+    print("save png to ", os.path.join(saveFolder, fileName))
+    plt.savefig(os.path.join(saveFolder, fileName))
+
+
+if __name__=="__main__":
+    plot_combined_acc(trainType="Nas")
+    plot_combined_acc(trainType="retrain")
+    # net = "alexnet"
+    # folder = "./accLoss" 
+    # title='combine_'+net
+    # saveFolder="./plot"
+    # fig, axs = plt.subplots(1, figsize=(10, 8), sharex=True, constrained_layout=True)
+    # for kth in range(1):
+    #     trainNasTrainAccFile = os.path.join(folder, "trainNasTrainAcc_{}.npy".format(str(kth)) )
+    #     trainNasnValAccFile = os.path.join( folder,"trainNasValAcc_{}.npy".format(str(kth)) )
+    #     testAccFile = os.path.join(folder, "trainNasTestAcc_{}.npy".format(str(kth)) )
+        
+        
+    #     accRecord = {
+    #         "train": np.load(trainNasTrainAccFile)*100,
+    #         "val": np.load(trainNasnValAccFile)*100,
+    #         "test": np.load(testAccFile)*100
+    #         }
+    #     plot_acc_curves(accRecord, axs, "acc_"+str(kth), "./plot")
+    # # plt.show()
+    # print("save png to ", os.path.join(saveFolder, title))
+    # plt.savefig(os.path.join(saveFolder, title))
+    exit()
+    folder = "./accLoss"
+    for kth in range(3):
+        trainNasTrainAccFile = os.path.join(folder, "trainNasTrainAcc_{}.npy".format(str(kth)) )
+        trainNasnValAccFile = os.path.join( folder,"trainNasValAcc_{}.npy".format(str(kth)) )
+        testAccFile = os.path.join(folder, "testAcc_{}.npy".format(str(kth)) )
+        
+        accRecord = {"train": np.load(trainNasTrainAccFile),
+            "val": np.load(trainNasnValAccFile),
+            "test": np.load(testAccFile)
+            }
+        plot_acc_curve(accRecord, "acc_"+str(kth), "./plot")
