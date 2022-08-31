@@ -205,7 +205,7 @@ class TestController:
             acc = correct / total
 
         net.train()
-        return acc
+        return acc * 100
     def prepareData(self):
         PATH_test = testDataSetFolder
         test = Path(PATH_test)
