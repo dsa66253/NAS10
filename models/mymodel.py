@@ -152,8 +152,8 @@ class Model(nn.Module):
         
         for key in cellArch:
             [_, i, j] = key.split("_")
-            self.layerDict[key] = Layer(self.numOfInnerCell, 0, featureMap["f"+i]["channel"], featureMap["f"+j]["channel"], 4, cellArchPerLayer=cellArch[key], layerName=key)
-            if i==0:
+            # self.layerDict[key] = Layer(self.numOfInnerCell, 0, featureMap["f"+i]["channel"], featureMap["f"+j]["channel"], 4, cellArchPerLayer=cellArch[key], layerName=key)
+            if i=="0":
                 self.layerDict["layer_{}_{}".format(i, j)] = Layer(self.numOfInnerCell, 0, featureMap["f"+i]["channel"], featureMap["f"+j]["channel"], 4, cellArchPerLayer=cellArch[key], layerName=key)
             else:
                 self.layerDict["layer_{}_{}".format(i, j)] = Layer(self.numOfInnerCell, 0, featureMap["f"+i]["channel"], featureMap["f"+j]["channel"], 1, cellArchPerLayer=cellArch[key], layerName=key)
@@ -270,7 +270,23 @@ class Model(nn.Module):
                 else:
                     print(type(outputList[ii][jj]), end = ' ')
             print()
+    def __simpleForward(self, input):
+        #* every time use alphas need to set alphas to 0 which has been drop
+        # self.normalizeAlphas()
+        #* manually create forward order
+        output = self.layerDict["layer_0_1"](input)
+        output = self.poolDict["maxPool_0"](output)
+        output = self.layerDict["layer_1_2"](output)
+        output = self.poolDict["maxPool_1"](output)
+        output = self.layerDict["layer_2_3"](output)
+        output = self.layerDict["layer_3_4"](output)
+        output = self.layerDict["layer_4_5"](output)
+        output = self.poolDict["maxPool_2"](output)
+        output = torch.flatten(output, start_dim=1)
+        output = self.fc(output)
+        return output
     def forward(self, input):
+        return self.__simpleForward(input)
         #* every time use alphas need to set alphas to 0 which has been drop
         # self.normalizeAlphas()
         #* create outputList

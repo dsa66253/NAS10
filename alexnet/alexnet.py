@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import random
 import numpy as np
-from models.initWeight import initialize_weights
+# from ..models.initWeight import initialize_weights
 
 class Baseline(nn.Module):
     def __init__(self, num_classes):
@@ -79,16 +79,14 @@ class Baseline(nn.Module):
         # print("output", x)
         return output
     def _initialize_weights(self):
-        initialize_weights(self)
+        # initialize_weights(self)
+        pass
                     
                     
-def set_seed_cpu(seed):
-    # print("set_seed_cpu seed: ", seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+if __name__=="__main__":
+    model = Baseline(10)
+    input = torch.rand(128, 3, 128, 128)
+    model(input)
 # class Baseline(nn.Module):
 #     def __init__(self, num_classes):
 #         super(Baseline, self).__init__()
