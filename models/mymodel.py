@@ -24,11 +24,14 @@ class InnerCell(nn.Module):
 
         #info make operations to a list according cellArchPerIneerCell
         self.opDict = nn.ModuleDict()
+        self.remainOpDict = nn.ModuleDict()
         self.alphasList = []
         for opName in self.transArchPerInnerCell:
             op = OPS[opName](inputChannel, outputChannel, stride, False, False)
             self.opDict[opName] = op
+            self.remainOpDict[opName] = op
             self.alphasList.append(op.getAlpha())
+            
     def getOpDict(self):
         return self.opDict
     def getAlpha(self):
@@ -377,6 +380,7 @@ class Model(nn.Module):
                 print(k)
                 for key, para in v.named_parameters():
                     self.weightParameters.append(para)
+
         return self.weightParameters
 if __name__=="__main__":
     torch.manual_seed(10)
