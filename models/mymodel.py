@@ -385,7 +385,8 @@ class Model(nn.Module):
 if __name__=="__main__":
     torch.manual_seed(10)
     innercell = InnerCell(3, 96, 1, None, "testLayer")
-    print(innercell)
+    for k in innercell:
+        print(k)
     exit()
 
 
