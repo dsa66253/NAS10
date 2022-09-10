@@ -166,7 +166,7 @@ class Model(nn.Module):
             self.poolDict["maxPool_{}".format(i)] = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self.fc = nn.Sequential(
-            # nn.Dropout(),
+            nn.Dropout(),
             nn.Linear(256 * 4 * 4, 4096),
             nn.ReLU(inplace=True),
             nn.Linear(4096, 2048),
