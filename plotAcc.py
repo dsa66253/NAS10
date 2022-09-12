@@ -54,13 +54,14 @@ def plot_combined_acc(folder = "./accLoss", title='combine', saveFolder="./plot"
     for kth in range(3):
         trainNasTrainAccFile = os.path.join(folder, "{}_train_acc_{}.npy".format(trainType, str(kth)) )
         trainNasnValAccFile = os.path.join( folder,"{}_val_acc_{}.npy".format(trainType, str(kth)) )
+        testAccFile = os.path.join( folder,"{}_test_acc_{}.npy".format(trainType, str(kth)) )
         # testAccFile = os.path.join(folder, "trainNasTestAcc_{}.npy".format(trainType, str(kth)) )
         
         
         accRecord = {
             "train": np.load(trainNasTrainAccFile),
             "val": np.load(trainNasnValAccFile),
-            # "test": np.load(testAccFile)
+            "test": np.load(testAccFile)
             }
         plot_acc_curves(accRecord, axs[kth], "acc_"+str(kth), "./plot")
     fileName = trainType+"_"+title
