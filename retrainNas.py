@@ -353,11 +353,11 @@ if __name__ == '__main__':
         criterion = prepareLossFunction()
         net = prepareModel(k)
         histDrawer = HistDrawer(folder["pltSavedDir"])
-        histDrawer.drawNetConvWeight(net, tag="ori")
+        histDrawer.drawNetConvWeight(net, tag="ori_{}".format(str(k)))
         model_optimizer = prepareOpt(net)
         
         last_epoch_val_ac, lossRecord, accRecord = myTrain(k, trainData, trainDataLoader, valDataLoader, net, model_optimizer, criterion, writer=None)  # 進入model訓練
-        histDrawer.drawNetConvWeight(net, tag="trained")
+        histDrawer.drawNetConvWeight(net, tag="trained_{}".format(str(k)))
         #info record training processs
         alMonitor = AccLossMonitor(k, folder["pltSavedDir"], folder["accLossDir"], trainType="retrain")
         alMonitor.plotAccLineChart(accRecord)
