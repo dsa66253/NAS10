@@ -283,7 +283,7 @@ def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer
             # writer.add_scalar('val_Acc/k='+str(kth), valAcc, epoch)
             last_epoch_val_acc = 100 * correct_images_val / total_images_val
         # exit()
-        # if iteration>=10:
+        # if iteration>=5:
         #     break
 
     lossRecord = {"train": record_train_loss, "val": record_val_loss}
