@@ -1,6 +1,6 @@
 # config.py
 from joblib import PrintTime
-datasetRoot = "../dataset3"
+datasetRoot = "../dataset2"
 trainDataSetFolder = datasetRoot+"/train"
 testDataSetFolder = datasetRoot+"/test"
 PRIMITIVES = [
