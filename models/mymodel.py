@@ -353,7 +353,7 @@ class Model(nn.Module):
                     if "alpha" in key:
                         print(k)
                         self.alphasParameters.append(para)
-                        print("grad ", para.grad)
+                        print("grad ", para.grad, para.item())
         # print(self.alphasParameters)
         return self.alphasParameters
     def getAlphasTensor(self):
