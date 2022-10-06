@@ -75,7 +75,7 @@ def plot_combined_acc(folder = "./accLoss", title='combine', saveFolder="./plot"
 
 
 if __name__=="__main__":
-    plot_combined_acc(trainType="Nas")
+    # plot_combined_acc(trainType="Nas")
     plot_combined_acc(trainType="retrain")
     # net = "alexnet"
     # folder = "./accLoss" 

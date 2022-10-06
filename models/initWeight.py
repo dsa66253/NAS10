@@ -30,8 +30,15 @@ exp2IniFunc = {
     "0925": lambda weight: torch.nn.init.uniform_(weight, -0.05, 0.0),
     "0925_3": lambda weight: torch.nn.init.uniform_(weight, 0.0, 0.0025),
     "0926": 0,
-    "0927_2": lambda weight: torch.nn.init.uniform_(weight, 0.025/4, 0.025/4),
-    "0927_4": lambda weight: torch.nn.init.uniform_(weight, 0.025/8, 0.025/8),
+    "0927": lambda weight: torch.nn.init.uniform_(weight, 0.025/4, 0.025/4),
+    "0927_3": lambda weight: torch.nn.init.uniform_(weight, 0.025/8, 0.025/8),
+    "0928_2": lambda weight: torch.nn.init.kaiming_normal_(weight),
+    # "0928_3": lambda weight: torch.nn.init.uniform_(weight, -0.05, 0.05),
+    # "0928_6": lambda weight: torch.nn.init.uniform_(weight, -0.05/2, 0.05/2),
+    "0929": lambda weight: torch.nn.init.uniform_(weight, -0.005/4, 0.005/4),
+    "0929_3": lambda weight: torch.nn.init.uniform_(weight, -0.005/8, 0.005/8),
+    "r0914_3": lambda weight: torch.nn.init.uniform_(weight, -0.005/2, 0.005/2),
+    "r0914_4": lambda weight: torch.nn.init.uniform_(weight, -0.005/4, 0.005/4) 
 }
 def TsengInitializeWeights(model, seed):
     for m in model.modules():
@@ -46,32 +53,32 @@ def initialize_weights(model, seed):
     print("set initialize weight with seed ", seed)
     curExp = openCurExp()
     print("cuurent experiment", curExp)
-    TsengInitializeWeights(model, seed)
-    # for m in model.modules():
-    #     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-    #         set_seed_cpu(seed)
-    #         exp2IniFunc[curExp](m.weight)
-    #         # torch.nn.init.kaiming_normal_(m.weight)
-    #         # m.weight = torch.abs(m.weight)
-    #         # torch.nn.init.uniform_(m.weight, 0, 0.025/2)
-    #         # m.weight.data.fill_(0)
-    #         # setTensorPositive(m.weight)
-    #         # torch.nn.init.normal_(m.weight, 0.00625, 0.00625/2)
-    #         if m.bias is not None:
-    #             torch.nn.init.constant_(m.bias, 1)
-    #     elif isinstance(m, nn.Linear):
-    #         exp2IniFunc[curExp](m.weight)
-    #         # torch.nn.init.kaiming_normal_(m.weight)
-    #         # setTensorPositive(m.weight.data)
-    #         # torch.nn.init.uniform_(m.weight, 0, 0.025/2)
-    #         # m.weight.data.fill_(0)
-    #         # nn.init.constant_(m.bias, 0)
-    #         # torch.nn.init.normal_(m.weight, 0.00625, 0.00625/2)
-    #         pass
-    #     elif isinstance(m, nn.BatchNorm2d):
-    #         if m.weight is not None:
-    #             m.weight.data.fill_(1)
-    #             m.bias.data.zero_()
+    # TsengInitializeWeights(model, seed)
+    for m in model.modules():
+        if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+            set_seed_cpu(seed)
+            # exp2IniFunc[curExp](m.weight)
+            # torch.nn.init.kaiming_normal_(m.weight)
+            # m.weight = torch.abs(m.weight)
+            # torch.nn.init.uniform_(m.weight, 0, 0.025/2)
+            # m.weight.data.fill_(0)
+            # setTensorPositive(m.weight)
+            # torch.nn.init.normal_(m.weight, 0.00625, 0.00625/2)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias, 1)
+        elif isinstance(m, nn.Linear):
+            # exp2IniFunc[curExp](m.weight)
+            # torch.nn.init.kaiming_normal_(m.weight)
+            # setTensorPositive(m.weight.data)
+            # torch.nn.init.uniform_(m.weight, 0, 0.025/2)
+            # m.weight.data.fill_(0)
+            # nn.init.constant_(m.bias, 0)
+            # torch.nn.init.normal_(m.weight, 0.00625, 0.00625/2)
+            pass
+        elif isinstance(m, nn.BatchNorm2d):
+            if m.weight is not None:
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
 def setTensorPositive(tensor):
     tmp = torch.zeros(tensor.shape)
     tmp = torch.nn.init.kaiming_normal_(tmp)
