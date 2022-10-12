@@ -110,7 +110,7 @@ class NewNasModel(nn.Module):
         output = self.poolDict["maxPool_1"](output)
         output = self.layerDict["layer_2_3"](output)
         output = self.layerDict["layer_3_4"](output)
-        output = self.layerDict["layer_4_5"](output)
+        # output = self.layerDict["layer_4_5"](output)
         output = self.poolDict["maxPool_2"](output)
         output = torch.flatten(output, start_dim=1)
         output = self.fc(output)

@@ -30,7 +30,7 @@ featureMap = {
         "featureMapDim":8
     },
     "f4":{
-        "channel":384,
+        "channel":256,
         "featureMapDim":4
     },
     # "f5":{
@@ -87,7 +87,7 @@ cfg_nasmodel = {
     'in_channel': 8,
     'out_channel': 64,
     "numOfClasses": 10,
-    "numOfLayers": len(trainMatrix),
+    "numOfLayers": len(featureMap)-1,
     "numOfInnerCell": len(trainMatrix[0]),
     "numOfOperations": len(PRIMITIVES),
     "cuddbenchMark": False,
@@ -109,7 +109,7 @@ cfg_newnasmodel = {
     'in_channel': 8,
     'out_channel': 64,
     "numOfClasses": 10,
-    "numOfLayers": len(trainMatrix),
+    "numOfLayers": len(featureMap)-1,
     "numOfInnerCell": len(trainMatrix[0]),
     "numOfOperations": len(PRIMITIVES),
     "cuddbenchMark": False
