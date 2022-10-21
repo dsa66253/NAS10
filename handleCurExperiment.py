@@ -26,8 +26,13 @@ def getCurExpName():
     setStdoutToFile("./experiments.json")
     print(json.dumps(exp, indent=4)) #* make ndarray to list
     return curExpName
-def moveFilesToLog():
-    pass
+
+def moveFile(fileNameList, sourceDir, desDir):
+    print("moving log from {} to {}".format(sourceDir, desDir))
+    for fileName  in fileNameList:
+        sourcePath = os.path.join(sourceDir, fileName)
+        desPath = os.path.join(desDir, fileName)
+        os.rename(sourcePath, desPath)
 def getAllFileName(dirPath):
     return [f for f in listdir(dirPath) if isfile(join(dirPath, f))]
 def moveLog(fileNameList, sourceDir, desDir):
@@ -51,6 +56,11 @@ def openCurExp():
 if __name__=="__main__":
     curExpName = openCurExp()
     desDir = join("./log", curExpName)
+    # move log
+    fileNameList = getAllFileName("./log")
+    desDir2 =  join(desDir, "log")
+    makeDir(desDir2)
+    moveFile(fileNameList, "./log", desDir2)
     # copy alpha
     fileNameList = getAllFileName("./alpha_pdart_nodrop")
     desDir2 =  join(desDir, "alpha_pdart_nodrop")
@@ -66,11 +76,7 @@ if __name__=="__main__":
     desDir2 =  join(desDir, "accLoss")
     makeDir(desDir2)
     copyFile(fileNameList, "./accLoss", desDir2)
-    # copy log
-    fileNameList = getAllFileName("./log")
-    desDir2 =  join(desDir, "log")
-    makeDir(desDir2)
-    copyFile(fileNameList, "./log", desDir2)
+ 
 
 
 

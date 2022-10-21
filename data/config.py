@@ -26,13 +26,13 @@ featureMap = {
         "featureMapDim":16
     },
     "f3":{
-        "channel":384,
-        "featureMapDim":8
-    },
-    "f4":{
         "channel":256,
         "featureMapDim":4
     },
+    # "f4":{
+    #     "channel":256,
+    #     "featureMapDim":4
+    # },
     # "f5":{
     #     "channel":256,
     #     "featureMapDim":4
@@ -49,8 +49,9 @@ featureMapDim = [
     3,
     96,
     256,
-    384,
-    384,
+    # 384,
+    256,
+    # 384,
     # 256,
 ]
 cfg_alexnet = {

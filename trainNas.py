@@ -439,16 +439,8 @@ if __name__ == '__main__':
         else:
             seed_img = 830
             seed_weight = 953
-        
-        accelerateByGpuAlgo(accelerateButUndetermine)
-        set_seed_cpu(seed_weight)  # 控制照片批次順序
-        
-        ImageFile.LOAD_TRUNCATED_IMAGES = True
-        os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+            
         args = parse_args()
-        
-        makeAllDir()
-        
         cfg = None
         if args.network == "alexnet":
             cfg = cfg_alexnet
@@ -457,6 +449,17 @@ if __name__ == '__main__':
         else:
             print('Model %s doesn\'t exist!' % (args.network))
             sys.exit(0)
+            
+        accelerateByGpuAlgo(cfg["cuddbenchMark"])
+        set_seed_cpu(seed_weight)  # 控制照片批次順序
+        
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+        os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+        
+        
+        makeAllDir()
+        
+        
 
         img_dim = cfg['image_size']
         num_gpu = cfg['ngpu']

@@ -205,7 +205,7 @@ def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer
     record_test_acc = np.array([])
 
     #info start training loop
-    for iteration in tqdm(range(start_iter, max_iter), unit =" iterations on {}".format(kth)):
+    for iteration in tqdm(range(start_iter, max_iter), unit =" iter on {}".format(kth)):
         #info things need to do per epoch
         if iteration % epoch_size == 0:
             if (iteration != 0):
@@ -278,7 +278,10 @@ def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer
             correct_images_val += (predicts_val == val_labels).sum()
             valAcc = correct_images_val / total_images_val *100
             record_val_acc = np.append(record_val_acc, valAcc.cpu())
-            
+            #info test set
+            print("start test epoch", epoch)
+            testAcc = testC.test(net)
+            record_test_acc = np.append(record_test_acc, testAcc)
             #info record acc an loss
             # writer.add_scalar('Train_Loss/k='+str(kth), train_loss.item(), epoch)
             # writer.add_scalar('Val_Loss/k='+str(kth), val_loss.item(), epoch)
@@ -286,11 +289,12 @@ def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer
             # writer.add_scalar('val_Acc/k='+str(kth), valAcc, epoch)
             last_epoch_val_acc = 100 * correct_images_val / total_images_val
         # exit()
-        # if iteration>=3:
-        #     break
 
     lossRecord = {"train": record_train_loss, "val": record_val_loss}
-    accRecord = {"train": record_train_acc, "val": record_val_acc}
+    accRecord = {"train": record_train_acc, "val": record_val_acc, "test": record_test_acc}
+    print("start test model before save model")
+    testAcc = testC.test(net)
+    testC.printAllModule(net)
     torch.save(net.state_dict(), os.path.join(folder["retrainSavedModel"], cfg['name'] + str(kth) + '_Final.pt'))
     return last_epoch_val_acc, lossRecord, accRecord
 
@@ -319,19 +323,22 @@ if __name__ == '__main__':
             seed_img = 830
             seed_weight = 953
             
-        accelerateByGpuAlgo(cfg_newnasmodel["cuddbenchMark"])
-        set_seed_cpu(seed_weight)
-        #! test same initial weight
         args = parse_args(str(k))
-        makeAllDir()
-        
-
         cfg = None
         if args.network == "newnasmodel":
             cfg = cfg_newnasmodel
         else:
             print('Retrain Model %s doesn\'t exist!' % (args.network))
             sys.exit(0)
+            
+        accelerateByGpuAlgo(cfg["cuddbenchMark"])
+        set_seed_cpu(seed_weight)
+        #! test same initial weight
+        
+        makeAllDir()
+        
+
+
             
         batch_size = cfg['batch_size']
 
@@ -344,7 +351,7 @@ if __name__ == '__main__':
 
         
         #info test
-        test = TestController(cfg, device)
+        testC = TestController(cfg, device)
         # writer = SummaryWriter(log_dir=folder["tensorboard_retrain"], comment="{}th".format(str(k)))
         
         print("seed_img{}, seed_weight{} start at ".format(seed_img, seed_weight), getCurrentTime())
@@ -368,14 +375,15 @@ if __name__ == '__main__':
         alMonitor.saveAccLossNp(accRecord, lossRecord)
 
         valList.append(last_epoch_val_ac)
-        print('retrain validate accuracy:', valList)
-        
+        print('retrain validate accuracy:')
+        print(valList)
         # writer.close()
         #info handle output file
         if stdoutTofile:
             setStdoutToDefault(f)
             
-    print('retrain validate accuracy:', valList)
+    print('retrain validate accuracy:')
+    print(valList)
 
 
 
