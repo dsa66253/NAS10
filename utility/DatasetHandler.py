@@ -22,7 +22,6 @@ from feature.utility import plot_acc_curve, setStdoutToFile, setStdoutToDefault
 from feature.utility import getCurrentTime, accelerateByGpuAlgo, get_device, plot_loss_curve
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
-trainDataSetFolder = "../datasetPractice/train"
 
 class DatasetHandler():
     def __init__(self, trainDataSetFolder, cfg, seed=10):
@@ -30,15 +29,12 @@ class DatasetHandler():
         self.augmentDatasetList = []
         self.trainDataSetFolder = trainDataSetFolder
         self.normalize = self.resize(cfg["image_size"])
-        self.originalData = datasets.ImageFolder(self.trainDataSetFolder, transform=transforms.Compose([
-                self.normalize,
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ]))
-        self.originalTrainDataset, self.originalValDataset = self.split_data(self.originalData, 0.2)
-        self.trainDataset = self.originalTrainDataset
-        self.augmentDatasetList.append(self.originalTrainDataset)
-        print("trainDataSetFolder", trainDataSetFolder)
-    def split_data(self, all_data, ratio=0.2):
+        self.originalData = None
+        self.originalTrainDataset = None
+        self.originalValDataset = None
+        self.getTrainDataset()
+        self.getValDataset()
+    def __split_data(self, all_data, ratio=0.2):
         n = len(all_data)  # total number of examples
         n_val = int(ratio * n)  # take ~10% for val
         set_seed_cpu(self.seed)
@@ -58,22 +54,43 @@ class DatasetHandler():
                 self.normalize,
                 augmentF
             ]))
-            newAugmentTrainDataset, _ = self.split_data(newAugmentDataset, 0.2)
+            newAugmentTrainDataset, _ = self.__split_data(newAugmentDataset, 0.2)
         except Exception as e:
-            print("Fail to load data set from: ",  trainDataSetFolder)
+            print("Fail to load data set from: ",  self.trainDataSetFolder)
             print(e)
             exit()
         # self.augmentDatasetList.append(newAugmentData)
-        print("self.trainDataset", type(self.trainDataset))
-        print("newAugmentTrainDataset", type(newAugmentTrainDataset))
-        self.trainDataset = torch.utils.data.ConcatDataset([self.trainDataset, newAugmentTrainDataset])
-        
+        # print("self.trainDataset", type(self.trainDataset))
+        # print("newAugmentTrainDataset", type(newAugmentTrainDataset))
+        self.originalTrainDataset = torch.utils.data.ConcatDataset([self.originalTrainDataset, newAugmentTrainDataset])
+        # exit()
     def getTrainDataset(self):
-        return self.trainDataset
+        if self.originalTrainDataset==None:
+            self.originalData = datasets.ImageFolder(self.trainDataSetFolder, transform=transforms.Compose([
+                    self.normalize,
+                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ]))
+            self.originalTrainDataset, self.originalValDataset = self.__split_data(self.originalData, 0.2)
+            self.augmentDatasetList.append(self.originalTrainDataset)
+        print("trainDataSetFolder", self.trainDataSetFolder)
+        return self.originalTrainDataset
     
     def getValDataset(self):
+        if self.originalValDataset==None:
+            self.originalData = datasets.ImageFolder(self.trainDataSetFolder, transform=transforms.Compose([
+                    self.normalize,
+                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ]))
+            self.originalTrainDataset, self.originalValDataset = self.__split_data(self.originalData, 0.2)
+            self.augmentDatasetList.append(self.originalTrainDataset)
+        print("trainDataSetFolder", self.trainDataSetFolder)
         return self.originalValDataset
-    
+    def getTestDataset(self):
+        self.testDataset = datasets.ImageFolder(self.trainDataSetFolder, transform=transforms.Compose([
+                    self.normalize,
+                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ]))
+        return self.testDataset
     @staticmethod
     def getOriginalDataset(trainDataSetFolder, cfg, seed=10):
         datsetHandle = DatasetHandler(trainDataSetFolder, cfg, seed)
@@ -82,25 +99,7 @@ class DatasetHandler():
         return len(self.trainDataset)
     def __getitem__(self, index):
         return self.trainDataset[index]
-    # def prepareDataSet(self, augmentF): 
-    #     #info prepare dataset
-    #     # print('Loading Dataset from {} with seed_img {}'.format(trainDataSetFolder, str(self.seed)))
-    #     train_transforms = self.normalize(10, cfg['image_size'])  # 正規化照片
-        
-    #     try:
-    #         all_data = datasets.ImageFolder(trainDataSetFolder, transform=transforms.Compose([
-                
-    #         ]))
-    #         # print(all_data.find_classes())
-            
-    #         print("all_data.class_to_idx", all_data.class_to_idx)
-    #         # exit()
-    #     except Exception as e:
-    #         print("Fail to load data set from: ",  trainDataSetFolder)
-    #         print(e)
-    #         exit()
-    #     train_data, val_data = split_data(all_data, 0.2)  # 切訓練集跟驗證集
-    #     return all_data
+
 def printImage(train_data, index):
 
     fig, axes = plt.subplots(len(train_data)//5, 5)
@@ -118,6 +117,7 @@ def printImage(train_data, index):
 
     
 if __name__ == "__main__":
+    trainDataSetFolder = "../datasetPractice/train"
     datasetHandler = DatasetHandler(trainDataSetFolder, cfg, 10)
     print(datasetHandler.getLength())
     printImage(datasetHandler.getTrainDataset(), "0")
