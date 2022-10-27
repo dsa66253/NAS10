@@ -29,14 +29,14 @@ featureMap = {
         "channel":256,
         "featureMapDim":4
     },
-    # "f4":{
-    #     "channel":256,
-    #     "featureMapDim":4
-    # },
-    # "f5":{
-    #     "channel":256,
-    #     "featureMapDim":4
-    # }
+    "f4":{
+        "channel":256,
+        "featureMapDim":4
+    },
+    "f5":{
+        "channel":256,
+        "featureMapDim":4
+    }
 }
 trainMatrix = [
     [[1, 1, 1, 1, 1]],

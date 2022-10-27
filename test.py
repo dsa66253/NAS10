@@ -213,7 +213,7 @@ class TestController:
                 correct += (predict == labels).sum().item()
                 for t, p in zip(labels.view(-1), predict.view(-1)):
                     confusion_matrix_torch[t.long(), p.long()] += 1
-                print("outputs ", outputs)
+                # print("outputs ", outputs)
                 # print("predict", predict)
                 print("labels", labels)
                 # print("total {}, correct {}".format(total, correct))

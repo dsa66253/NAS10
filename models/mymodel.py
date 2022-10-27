@@ -8,165 +8,35 @@ import os
 import torch.nn.functional as F
 import numpy as np
 from data.config import epoch_to_drop
+from .Layer import Layer
+from .InnerCell import InnerCell
 
 
-#info Cell_conv actually is innerCell
-class InnerCell(nn.Module):
-    #todo make it general def __init__(self, inputChannel, outputChannel, stride, cellArchPerIneerCell, alphas)
-    def __init__(self, inputChannel, outputChannel, stride, cellArchPerIneerCell, innercellName):
-        super(InnerCell, self).__init__()
-        # trainslate index to key of operations
-        self.transArchPerInnerCell= []
-        for index in range(len(PRIMITIVES)):
-            self.transArchPerInnerCell.append(PRIMITIVES[index])
-        self.cellArchPerIneerCell = cellArchPerIneerCell
-        self.innercellName = innercellName
-
-        #info make operations to a list according cellArchPerIneerCell
-        self.opDict = nn.ModuleDict()
-        self.remainOpDict = nn.ModuleDict()
-        self.alphasList = []
-        for opName in self.transArchPerInnerCell:
-            op = OPS[opName](inputChannel, outputChannel, stride, False, False)
-            self.opDict[opName] = op
-            self.remainOpDict[opName] = op
-            self.alphasList.append(op.getAlpha())
-            
-    def getOpDict(self):
-        return self.opDict
-    def getAlpha(self):
-        # for i in range(len(self.opList)):
-        #     print(id(self.alphasList[i]))
-        # for i in range(len(self.opList)):
-        #     self.alphasList.append(self.opList[i].getAlpha())
-        #     print(id(self.alphasList[i]))
-        #! this will get old alpha
-        # exit()
-        self.alphasList = []
-        for opName in self.opDict:
-            self.alphasList.append(self.opDict[opName].getAlpha())
-        return self.alphasList
-    def getAlphaAt(self, index):
-        return self.opDict[PRIMITIVES[index]].getAlpha()
-    def setAlpha(self, inputAlphaList):
-        for i in range(len(self.opDict)):
-            self.opDict[PRIMITIVES[i]].setAlpha(inputAlphaList[i])
-    def setAlphaAt(self, index, value):
-        self.opDict[PRIMITIVES[index]].setAlpha(value)
-    def getSwitch(self):
-        switchList = []
-        for i in range(len(self.opDict)):
-            switchList.append(self.opDict[PRIMITIVES[i]].getSwitch())
-        return switchList
-    def getSwitchAt(self, index):
-        return self.opDict[PRIMITIVES[index]].getSwitch()
-    def turnOffOp(self, index):
-        self.opDict[PRIMITIVES[index]].turnSwitch(False)
-    def show(self, input):
-        output = None
-        for opName in self.opDict:
-            #! Can NOT use inplace operation +=. WHY? 
-            #! Ans: inplace operation make computational graphq fail
-            if self.opDict[opName].getSwitch():
-                
-                if output==None:
-                    print("forward ", self.innercellName, opName, self.opDict[opName].getAlpha().is_leaf, self.opDict[opName].getAlpha().grad)
-                    output = self.opDict[opName](input)
-                else:
-                    print("forward ", self.innercellName, opName, self.opDict[opName].getAlpha().is_leaf, self.opDict[opName].getAlpha().grad)
-                    output = output + self.opDict[opName](input)
-            
-        return output
-    def forward(self, input):
-        #info add each output of operation element-wise
-        # print("next(model.parameters()).is_cuda", next(self.parameters()).is_cuda)
-        # out = self.opList[0](input)
-        output = None
-        for opName in self.opDict:
-            #! Can NOT use inplace operation +=. WHY? 
-            #! Ans: inplace operation make computational graphq fail
-            if self.opDict[opName].getSwitch():
-                
-                if output==None:
-                    output = self.opDict[opName](input) * self.opDict[opName].getAlpha()
-                else:
-                    output = output + self.opDict[opName](input)* self.opDict[opName].getAlpha()
-            
-        return output
-class Layer(nn.Module):
-    def __init__(self, numOfInnerCell, layer, inputChannel=3, outputChannel=96, stride=1, padding=1, cellArchPerLayer=None, layerName=""):
-        super(Layer, self).__init__()
-        #info set private attribute
-        self.numOfInnerCell = numOfInnerCell
-        self.layer = layer
-        self.inputChannel = inputChannel
-        self.outputChannel = outputChannel
-        self.layerName = layerName
-        self.alphasDict = {}
-        self.alphasList = []
-        #info set inner cell
-        
-        #info define layer structure
-        # print("cellArchPerLayer", cellArchPerLayer)
-        self.innerCellDict = nn.ModuleDict({
-            'innerCell_0': InnerCell(inputChannel, outputChannel//self.numOfInnerCell, stride, cellArchPerLayer[0], innercellName=self.layerName+".innerCell_0"),
-            # 'innerCell_'+str(layer)+'_1': cell(inputChannel, outputChannel//self.numOfInnerCell, stride),
-        })
-        #info create alphaList 
-        for innerCellName in self.innerCellDict:
-            tmp = self.innerCellDict[innerCellName].getAlpha()
-            self.alphasDict[innerCellName] = [ tmp ]
-            self.alphasList.append(tmp)
-
-    def forward(self, input):
-        #* concate innerCell's output instead of add them elementwise
-        output = None
-        for name in self.innerCellDict:
-            # add each inner cell directly without alphas involved
-            if output == None:
-                output = self.innerCellDict[name](input)
-            else:
-                output = torch.cat( (output, self.innerCellDict[name](input)), dim=1 )
-
-        return output
-    def getAlphas(self):
-        return self.alphasList
-
-                    
 class Model(nn.Module):
-    def __init__(self, cellArch):
-        # todo given NAS structure to do NAS train
+    def __init__(self):
         super(Model, self).__init__()
         #info private attribute
         self.numOfOpPerCell = cfg["numOfOperations"]
         self.numOfLayer = cfg["numOfLayers"]
         self.numOfInnerCell = cfg["numOfInnerCell"]
-        self.cellArch = cellArch
+        self.currentEpoch = 0
         self.alphasDict = {}
+        self.betaDict = {}
         #info define network structure
         self.layerDict = nn.ModuleDict({})
-        # for i in range(len(featureMapDim)-1):
-        #     for j in range(i+1, len(featureMapDim)):
-        #         if i==0:
-        #             self.layerDict["layer_{}_{}".format(i, j)] = Layer(self.numOfInnerCell, 0, featureMapDim[i], featureMapDim[j], 4, cellArchPerLayer=trainMatrix[0], layerName="layer_{}_{}".format(i, j))
-        #         else:
-        #             self.layerDict["layer_{}_{}".format(i, j)] = Layer(self.numOfInnerCell, 0, featureMapDim[i], featureMapDim[j], 1, cellArchPerLayer=trainMatrix[0], layerName="layer_{}_{}".format(i, j))
+        for i in range(len(featureMapDim)-1):
+            for j in range(i+1, len(featureMapDim)):
+                if i==0:
+                    self.layerDict["layer_{}_{}".format(i, j)] = Layer(self.numOfInnerCell, 0, featureMapDim[i], featureMapDim[j], 4, cellArchPerLayer=trainMatrix[0], layerName="layer_{}_{}".format(i, j))
+                else:
+                    self.layerDict["layer_{}_{}".format(i, j)] = Layer(self.numOfInnerCell, 0, featureMapDim[i], featureMapDim[j], 1, cellArchPerLayer=trainMatrix[0], layerName="layer_{}_{}".format(i, j))
                 # print("layer_{}_{}".format(i, j), type(layerDic["layer_{}_{}".format(i, j)]))
         
-        for key in cellArch:
-            [_, i, j] = key.split("_")
-            # self.layerDict[key] = Layer(self.numOfInnerCell, 0, featureMap["f"+i]["channel"], featureMap["f"+j]["channel"], 4, cellArchPerLayer=cellArch[key], layerName=key)
-            if i=="0":
-                self.layerDict["layer_{}_{}".format(i, j)] = Layer(self.numOfInnerCell, 0, featureMap["f"+i]["channel"], featureMap["f"+j]["channel"], 4, cellArchPerLayer=cellArch[key], layerName=key)
-            else:
-                self.layerDict["layer_{}_{}".format(i, j)] = Layer(self.numOfInnerCell, 0, featureMap["f"+i]["channel"], featureMap["f"+j]["channel"], 1, cellArchPerLayer=cellArch[key], layerName=key)
-
         self.poolDict = nn.ModuleDict({})
         for i in range(3):
             self.poolDict["maxPool_{}".format(i)] = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self.fc = nn.Sequential(
-            nn.Dropout(),
             nn.Linear(256 * 4 * 4, 4096),
             nn.ReLU(inplace=True),
             nn.Linear(4096, 2048),
@@ -178,8 +48,12 @@ class Model(nn.Module):
         for k in self.layerDict.keys():
             if "layer" in k:
                 self.alphasDict[k] = self.layerDict[k].getAlphas()
-
-        self.__initailizeAlphas()
+        #info create betaDict
+        for k in self.layerDict.keys():
+            if "layer" in k:
+                self.betaDict[k] = self.layerDict[k].getBeta()
+        #! why assign 0 as initial value make grad equal to 0
+        # self.__initailizeAlphas()
         # self.alphasMask = torch.full(self._alphas.shape, False, dtype=torch.bool) #* True means that element are masked(dropped)
         
         #* self.alphas can get the attribute
@@ -198,7 +72,9 @@ class Model(nn.Module):
             for innerCellDict in self.layerDict[layerName].children():
                 #* for each innercell
                 currentAlpha = torch.FloatTensor(innerCellDict["innerCell_0"].getAlpha())
-                (_, allMinIndex) = torch.topk( currentAlpha, len(PRIMITIVES), largest=False )
+                compareAlpha = torch.abs(currentAlpha)
+                (_, allMinIndex) = torch.topk( compareAlpha, len(PRIMITIVES), largest=False )
+                
                 print("allMinIndex", allMinIndex, _)                
                 #* drop operation
                 for alphaIndex in allMinIndex:
@@ -209,8 +85,9 @@ class Model(nn.Module):
                         print("drop", layerName, PRIMITIVES[alphaIndex])
                         break
                 print("after drop ", torch.FloatTensor(innerCellDict["innerCell_0"].getAlpha()))
-                # print("grad ", torch.FloatTensor(innerCellDict["innerCell_0"].getAlpha()).grad)
-                
+                print("grad ", torch.FloatTensor(innerCellDict["innerCell_0"].getAlpha()).grad)
+                #* make drop operation not being call forward()
+                # self.layerDict[layerName].remakeRemainOp()
     
     
     def normalizeAlphas(self):
@@ -264,77 +141,51 @@ class Model(nn.Module):
             else:
                 break
         return output
-    def __shopOutputList(self, outputList):
-        for ii in range(len(featureMapDim)):
-            for jj in range(len(featureMapDim)):
-                # print("type(outputList[ii][jj]", type(outputList[ii][jj]))
-                if isinstance(type(outputList[ii][jj]), int):
-                    print(type(outputList[ii][jj]), end = ' ')
-                else:
-                    print(type(outputList[ii][jj]), end = ' ')
-            print()
-    def __simpleForward(self, input):
-        #* every time use alphas need to set alphas to 0 which has been drop
-        # self.normalizeAlphas()
-        #* manually create forward order
-        output = self.layerDict["layer_0_1"](input)
-        output = self.poolDict["maxPool_0"](output)
-        output = self.layerDict["layer_1_2"](output)
-        output = self.poolDict["maxPool_1"](output)
-        output = self.layerDict["layer_2_3"](output)
-        output = self.layerDict["layer_3_4"](output)
-        output = self.layerDict["layer_4_5"](output)
-        output = self.poolDict["maxPool_2"](output)
-        output = torch.flatten(output, start_dim=1)
-        output = self.fc(output)
-        return output
+
     def forward(self, input):
-        return self.__simpleForward(input)
         #* every time use alphas need to set alphas to 0 which has been drop
         # self.normalizeAlphas()
         #* create outputList
+        
         outputList = [[0] * len(featureMapDim) for i in range(len(featureMapDim))]
         featureMapList = [0]*len(featureMapDim)
         featureMapList[0] = input
-        # print(outputList)
-        # for ii in range(len(featureMapDim)):
-        #     for jj in range(len(featureMapDim)):
-        #         # print("type(outputList[ii][jj]", type(outputList[ii][jj]))
-        #         if isinstance(type(outputList[ii][jj]), int):
-        #             print(type(outputList[ii][jj]), end = ' ')
-        #         else:
-        #             print(type(outputList[ii][jj]), end = ' ')
-        #     print()
-        for i in range(len(featureMap)-1):
-            for j in range(i+1, len(featureMap)):
+        for i in range(len(featureMapDim)-1):
+            for j in range(i+1, len(featureMapDim)):
                 #* feed Fi feature map to layer
-                # print("featureMapList[i]", featureMapList[i].shape)
-                try:
-                    output = self.layerDict["layer_{}_{}".format(i, j)](featureMapList[i])
-                except KeyError:
-                    break
-                except Exception as e:
-                    print("not key error", e)
+                output = self.layerDict["layer_{}_{}".format(i, j)](featureMapList[i])
+
                 #* handle max pooling
                 output = self.maxPool(j, output)
                 outputList[i][j] = output
-                # print("layer_{}_{}".format(i, j), "output.shape", output.shape)
+
             #* prepare the next feature map
             preOutput = None
             for nextFeatureMap in range(i+1): 
                 if preOutput==None:
+                    # print("preOutput==None")
+                    # print("shape", outputList[nextFeatureMap][i+1].shape)
                     preOutput = outputList[nextFeatureMap][i+1]
-
+                    # print("nextFeatureMap", nextFeatureMap, i+1, preOutput.shape)
                 else:
+                    # print("preOutput!=None")
+                    # print("shape", outputList[nextFeatureMap][i+1].shape)
                     try:
+                        # print("nextFeatureMap", nextFeatureMap, i+1, preOutput.shape)
                         preOutput = preOutput + outputList[nextFeatureMap][i+1]
                     except:
-                        print("unmatch dim on ", nextFeatureMap)
                         print(preOutput.shape, outputList[nextFeatureMap][i+1].shape)
                         exit()
+                    
+            # print("preOutput", i+1, preOutput.shape)
             
+
+            # print("preOutput.shape", preOutput.shape)
             featureMapList[i+1] = preOutput
+            # featureMapList.append(preOutput)
+            # print("len(featureMapList)", len(featureMapList))
         output = featureMapList[-1]
+
         output = torch.flatten(output, start_dim=1)
         output = self.fc(output)
         return output
@@ -342,7 +193,7 @@ class Model(nn.Module):
         return self.alphasDict
         
     def getAlphasPara(self):
-        print("getAlphas()")
+        print("getAlphasPara()")
         #! why returning a set is correct
         self.alphasParameters = []
         for k, v in self.named_modules():
@@ -380,14 +231,38 @@ class Model(nn.Module):
                 print(k)
                 for key, para in v.named_parameters():
                     self.weightParameters.append(para)
-
         return self.weightParameters
+    def getBetaPara(self):
+        # todo think drop-beta algo
+        print("getBetaPara()")
+        #! why returning a set is correct
+        self.betaParameters = []
+        for k, v in self.named_modules():
+        #* algo: get all submodule, check if it's instance of Conv, check switch, renew optim
+            if isinstance(v, InnerCell) and v.getInnerCellSwitch()==True:
+                for key, para in v.named_parameters():
+                    if "beta" in key:
+                        print(k)
+                        self.betaParameters.append(para)
+                        print("grad ", para.grad, para.item())
+        
+        # print(self.alphasParameters)
+        return self.betaParameters
+    def getBetaDict(self):
+        return self.betaDict
+    def dropBeta(self):
+        dropOrNot=False
+        for layerName in self.layerDict:
+            for innerCellDict in self.layerDict[layerName].children():
+                #* for each innercell
+                if innerCellDict["innerCell_0"].getBeta().item()<0.5:
+                    innerCellDict["innerCell_0"].setBeta(0.0)
+                    innerCellDict["innerCell_0"].turnInnerCellSwitch(False)
+                    print("drop beta:", layerName)
+                    dropOrNot=True
+        return dropOrNot
 if __name__=="__main__":
-    torch.manual_seed(10)
-    innercell = InnerCell(3, 96, 1, None, "testLayer")
-    for k in innercell:
-        print(k)
-    exit()
+    pass
 
 
 
