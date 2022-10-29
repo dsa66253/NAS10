@@ -1,7 +1,7 @@
 import subprocess
 import json, os, sys, copy
 from os.path import isfile, join
-from data.config import folder
+from data.config import folder, cfg_newnasmodel as cfg
 def makeAllDir():
     for folderName in folder:
         print("making folder ", folder[folderName])
@@ -43,11 +43,11 @@ def brutNas():
         #     0,
         #     0,
         #     0,
-        #     0
+        #     1
         # ],
         # "layer_1_2": [
         #     0,
-        #     0,
+        #     1,
         #     0,
         #     0,
         #     0
@@ -72,20 +72,21 @@ def brutNas():
             0,
             0,
             0
-        ]
+        ],
     }
     # brutally train all possible arch of first two layers
 
-    for i in range(0, 5):
+    for i in range(5):
         # for fisrt layer
         for j in range(5):
             # for second layer
-            #info handle curExperiment
+
             manualAssign = copy.deepcopy(initiManualAssign)
+            
             manualAssign["layer_0_4"][i] = 1
             manualAssign["layer_4_5"][j] = 1
             f = setStdoutToFile("./curExperiment.json")
-            curExpName = "1021_brutL0L1.{}_{}".format(i, j)
+            curExpName = "1027_brutL3L4.{}_{}".format(i, j)
             desDir = join("./log", curExpName)
             print(json.dumps({curExpName:1}, indent=4))
             setStdoutToDefault(f)
@@ -93,13 +94,14 @@ def brutNas():
             makeDir(desDir)
             makeAllDir()
             #info handle decode job
-            for kth in range(3):
+            for kth in range(cfg["numOfKth"]):
                 filePath = "./decode/{}th_decode.json".format(kth)
                 f = setStdoutToFile(filePath)
                 print(json.dumps(manualAssign, indent=4)) #* make ndarray to list
                 setStdoutToDefault(f)   
-            subprocess.call('./train.sh')
             
+            subprocess.call('./train.sh')
+            # exit()
             
 
 if __name__=="__main__":

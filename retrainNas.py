@@ -1,9 +1,7 @@
 from __future__ import print_function
 import math
 import os
-from random import seed
 import sys
-from unicodedata import east_asian_width
 import torch
 import torch.optim as optim
 from test import TestController
@@ -11,13 +9,11 @@ from test import TestController
 import argparse
 from torch import nn
 from torchvision import transforms, datasets
-from data.config import cfg_newnasmodel, trainDataSetFolder
+from data.config import cfg_newnasmodel, trainDataSetFolder, seed
 from tensorboardX import SummaryWriter
 import numpy as np
 from data.config import folder
-from feature.normalize import normalize
 from feature.make_dir import makeDir
-from feature.split_data import split_data
 from feature.random_seed import set_seed_cpu
 from PIL import ImageFile
 from tqdm import tqdm
@@ -34,6 +30,7 @@ import json
 from utility.HistDrawer import HistDrawer
 # from train_nas_5cell import prepareDataloader
 from models.initWeight import initialize_weights
+from utility.ValController import ValController
 stdoutTofile = True
 accelerateButUndetermine = cfg_newnasmodel["cuddbenchMark"]
 recover = False
@@ -41,7 +38,7 @@ def printNetGrad(net):
     for name, para in net.named_parameters():
         print("grad", name, "\n", para)
         break
-def parse_args(k):
+def parse_args(k=0):
     parser = argparse.ArgumentParser(description='imagenet nas Training')
     parser.add_argument('--network', default='newnasmodel', help='Backbone network mobile0.25 or resnet50')
     parser.add_argument('--num_workers', default=0, type=int, help='Number of workers used in dataloading')
@@ -51,8 +48,8 @@ def parse_args(k):
     parser.add_argument('--resume_epoch', default=0, type=int, help='resume iter for retraining')
     parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay for SGD')
     parser.add_argument('--gamma', default=0.1, type=float, help='Gamma update for SGD')
-    parser.add_argument('--genotype_file', type=str, default='genotype_' + str(k) + '.npy',
-                        help='put decode file')
+    # parser.add_argument('--genotype_file', type=str, default='genotype_' + str(k) + '.npy',
+    #                     help='put decode file')
     parser.add_argument('--pltSavedDir', type=str, default='./plot',
                         help='plot train loss and val loss')
     args = parser.parse_args()
@@ -71,9 +68,8 @@ def saveAccLoss(kth, lossRecord, accRecord):
         print(e)
 def prepareDataSet():
     #info prepare dataset
-    datasetHandler = DatasetHandler(trainDataSetFolder, cfg, seed_img)
-    datasetHandler.addAugmentDataset(transforms.RandomHorizontalFlip(p=1))
-
+    datasetHandler = DatasetHandler(trainDataSetFolder, cfg, seed_weight)
+    # datasetHandler.addAugmentDataset(transforms.RandomHorizontalFlip(p=1))
     # datasetHandler.addAugmentDataset(transforms.RandomRotation(degrees=10))
     print("training dataset set size:", len(datasetHandler.getTrainDataset()))
     print("val dataset set size:", len(datasetHandler.getValDataset()))
@@ -83,9 +79,9 @@ def prepareDataSet():
 def prepareDataLoader(trainData, valData):
     #info prepare dataloader
     train_loader = torch.utils.data.DataLoader(trainData, batch_size=batch_size, num_workers=args.num_workers,
-                                            shuffle=False, pin_memory=True)
+                                            shuffle=True, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(valData, batch_size=batch_size, num_workers=args.num_workers,
-                                            shuffle=False, pin_memory=True)
+                                            shuffle=True, pin_memory=True)
     return train_loader, val_loader
 
 def prepareLossFunction():
@@ -103,13 +99,14 @@ def prepareModel(kth):
     print("Preparing model...")
     net = NewNasModel(cellArch=archDict)
     net.train()
+    # net.eval()
     net = net.to(device)
     print("net.cellArch:", net.cellArch)
     print("net", net)
-    initialize_weights(net, seed_img)
+    initialize_weights(net, seed_weight)
     return net
 def prepareOpt(net):
-    return optim.SGD(net.parameters(), lr=initial_lr, momentum=momentum,
+    return optim.SGD(net.getWeight(), lr=initial_lr, momentum=momentum,
                     weight_decay=weight_decay)  # 是否采取 weight_decay
 
 def saveCheckPoint(kth, epoch, optimizer, net, lossRecord, accReocrd):
@@ -226,8 +223,8 @@ def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer
         
         train_images = train_images.to(device)
         train_labels = train_labels.to(device)
-        val_images = val_images.to(device)
-        val_labels = val_labels.to(device)
+        # val_images = val_images.to(device)
+        # val_labels = val_labels.to(device)
 
         # print("================111")
         model_optimizer.zero_grad(set_to_none=True)
@@ -255,13 +252,6 @@ def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer
         # print("================")
         #info do statistics after this epoch
         if iteration % epoch_size == 0:
-            with torch.no_grad():
-                #info validation data forward pass
-                val_outputs = net(val_images)
-                _, predicts_val = torch.max(val_outputs.data, 1)
-                val_loss = criterion(val_outputs, val_labels)
-                record_val_loss = np.append(record_val_loss, val_loss.item())
-            
             #info calculate training data acc and loss 
             _, predicts = torch.max(train_outputs.data, 1)
             record_train_loss = np.append(record_train_loss, train_loss.item())
@@ -273,12 +263,13 @@ def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer
             record_train_acc = np.append(record_train_acc, trainAcc.cpu())
             
             #info calculate validation data acc and loss 
-            total_images_val = 0
-            correct_images_val = 0
-            total_images_val += val_labels.size(0)
-            correct_images_val += (predicts_val == val_labels).sum()
-            valAcc = correct_images_val / total_images_val *100
-            record_val_acc = np.append(record_val_acc, valAcc.cpu())
+            # total_images_val = 0
+            # correct_images_val = 0
+            # total_images_val += val_labels.size(0)
+            # correct_images_val += (predicts_val == val_labels).sum()
+            valAcc = valC.val(net)
+            record_val_acc = np.append(record_val_acc, valAcc)
+            record_val_loss = np.append(record_val_loss, torch.Tensor([0]))
             #info test set
             print("start test epoch", epoch)
             testAcc = testC.test(net)
@@ -288,15 +279,18 @@ def myTrain(kth, trainData, trainDataLoader, valDataLoader, net, model_optimizer
             # writer.add_scalar('Val_Loss/k='+str(kth), val_loss.item(), epoch)
             # writer.add_scalar('train_Acc/k='+str(kth), trainAcc, epoch)
             # writer.add_scalar('val_Acc/k='+str(kth), valAcc, epoch)
-            last_epoch_val_acc = 100 * correct_images_val / total_images_val
+            
         # exit()
-
+        # if iteration>=50:
+        #     break
+    last_epoch_val_acc = valC.val(net)
     lossRecord = {"train": record_train_loss, "val": record_val_loss}
     accRecord = {"train": record_train_acc, "val": record_val_acc, "test": record_test_acc}
     print("start test model before save model")
     testAcc = testC.test(net)
-    testC.printAllModule(net)
+    # testC.printAllModule(net)
     torch.save(net.state_dict(), os.path.join(folder["retrainSavedModel"], cfg['name'] + str(kth) + '_Final.pt'))
+    
     return last_epoch_val_acc, lossRecord, accRecord
 
 
@@ -307,39 +301,22 @@ if __name__ == '__main__':
     torch.set_printoptions(precision=6, sci_mode=False, threshold=1000)
     torch.set_default_dtype(torch.float32) #* torch.float will slow the training speed
     valList = []
-
-    for k in range(0, 3):
+    cfg = cfg_newnasmodel   
+    for k in range(0, cfg["numOfKth"]):
         #info handle stdout to a file
         if stdoutTofile:
             f = setStdoutToFile(folder["log"]+"/retrain_5cell_{}th.txt".format(str(k)))
         
         #info set seed
-        if k == 0:
-            seed_img = 10
-            seed_weight = 20
-        elif k == 1:
-            seed_img = 255
-            seed_weight = 278
-        else:
-            seed_img = 830
-            seed_weight = 953
+        seed_weight = seed[str(k)]
             
         args = parse_args(str(k))
-        cfg = None
-        if args.network == "newnasmodel":
-            cfg = cfg_newnasmodel
-        else:
-            print('Retrain Model %s doesn\'t exist!' % (args.network))
-            sys.exit(0)
             
         accelerateByGpuAlgo(cfg["cuddbenchMark"])
         set_seed_cpu(seed_weight)
         #! test same initial weight
         
         makeAllDir()
-        
-
-
             
         batch_size = cfg['batch_size']
 
@@ -351,23 +328,32 @@ if __name__ == '__main__':
         gamma = args.gamma
 
         
-        #info test
-        testC = TestController(cfg, device)
+
+        
+        
         # writer = SummaryWriter(log_dir=folder["tensorboard_retrain"], comment="{}th".format(str(k)))
         
-        print("seed_img{}, seed_weight{} start at ".format(seed_img, seed_weight), getCurrentTime())
+        print("seed_weight{} start at ".format(seed_weight), getCurrentTime())
         print("cfg", cfg)
         
         #info training process 
         trainData, valData = prepareDataSet()
         trainDataLoader, valDataLoader = prepareDataLoader(trainData, valData)
+
+        
         criterion = prepareLossFunction()
         net = prepareModel(k)
         histDrawer = HistDrawer(folder["pltSavedDir"])
         histDrawer.drawNetConvWeight(net, tag="ori_{}".format(str(k)))
         model_optimizer = prepareOpt(net)
-        
-        last_epoch_val_ac, lossRecord, accRecord = myTrain(k, trainData, trainDataLoader, valDataLoader, net, model_optimizer, criterion, writer=None)  # 進入model訓練
+        #info test controller
+        testC = TestController(cfg, device)
+        testC.printAllModule(net)
+        #info validation controller
+        valC = ValController(cfg, device, valDataLoader, criterion)
+        # info training loop
+        last_epoch_val_acc, lossRecord, accRecord = myTrain(k, trainData, trainDataLoader, valDataLoader, net, model_optimizer, criterion, writer=None)  # 進入model訓練
+
         histDrawer.drawNetConvWeight(net, tag="trained_{}".format(str(k)))
         #info record training processs
         alMonitor = AccLossMonitor(k, folder["pltSavedDir"], folder["accLossDir"], trainType="retrain")
@@ -375,7 +361,7 @@ if __name__ == '__main__':
         alMonitor.plotLossLineChart(lossRecord)
         alMonitor.saveAccLossNp(accRecord, lossRecord)
 
-        valList.append(last_epoch_val_ac)
+        valList.append(last_epoch_val_acc)
         print('retrain validate accuracy:')
         print(valList)
         # writer.close()

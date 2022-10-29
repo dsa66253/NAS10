@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 import os
-from models.myoperation import OPS
+from models.myoperation import OPS, Conv
 from data.config import cfg_newnasmodel as cfg
 from data.config import PRIMITIVES, featureMap
 import numpy as np
@@ -46,6 +46,13 @@ class NewNasModel(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(2048, cfg["numOfClasses"])
         )
+        # info set initial beta and alpha
+        for k, v in self.named_modules():
+            if isinstance(v, InnerCell):
+                v.setBeta(1.0)
+            if isinstance(v, Conv):
+                v.setAlpha(1.0)
+        
         
     def forward(self, input):
         output=None
@@ -105,7 +112,27 @@ class NewNasModel(nn.Module):
         return output
     def __initialize_weights(self):
         initialize_weights(self)
-        
+    def getWeight(self):
+        print("getWeight()")
+        # for k, v in self.named_parameters():
+        #     print(k)
+        # exit()
+        # print(self.get_submodule("layerDict.layer_0_1.innerCellDict.innerCell_0.opList.0"))
+        self.weightParameters = []
+        for k, v in self.named_modules():
+        #* algo: get all submodule, check if it's instance of Conv, check switch, renew optim
+            # print("->", k)
+            if "conv" in k.split(".")[-1]:
+                # get conv module
+                if v.getSwitch()==True:
+                    print(k)
+                    for key, para in v.named_parameters():
+                        self.weightParameters.append(para)
+            elif "poolDict" in k.split(".")[-1] or "fc" in k.split(".")[-1]:
+                print(k)
+                for key, para in v.named_parameters():
+                    self.weightParameters.append(para)
+        return self.weightParameters
 if __name__ == '__main__':
     genotype_filename = os.path.join('./weights_pdarts_nodrop/',
                         'genotype_' + str(0) +".npy")

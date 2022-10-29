@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from torch.autograd import Variable
 from torch.utils.data import Subset
 from torchvision import transforms, datasets
-from data.config import cfg_newnasmodel, cfg_alexnet, folder, cfg_nasmodel as cfg, testDataSetFolder
+from data.config import  cfg_alexnet, folder, seed, cfg_newnasmodel as cfg, testDataSetFolder
 from models.retrainModel import NewNasModel
 # from model import Model
 from TsengCode.alexnet import Baseline
@@ -185,6 +185,7 @@ class TestController:
     def __init__(self, cfg, device, seed=20, testDataSetFolder=testDataSetFolder):
         self.cfg = cfg
         self.testSet = self.prepareData(seed, testDataSetFolder)
+        print("tatal number of test images: ", len(self.testSet))
         self.testDataLoader = self.prepareDataLoader(self.testSet)
         self.num_classes = cfg["numOfClasses"]
         self.device = device
@@ -197,6 +198,7 @@ class TestController:
     def test(self, net):
         confusion_matrix_torch = torch.zeros(self.num_classes, self.num_classes)
         net.eval()
+        # print(net)
         with torch.no_grad():
             correct = 0
             total = 0
@@ -215,7 +217,7 @@ class TestController:
                     confusion_matrix_torch[t.long(), p.long()] += 1
                 # print("outputs ", outputs)
                 # print("predict", predict)
-                print("labels", labels)
+                # print("labels", labels)
                 # print("total {}, correct {}".format(total, correct))
             acc = correct / total
 
@@ -233,7 +235,7 @@ if __name__ == '__main__':
     torch.set_printoptions(precision=6, sci_mode=False, threshold=1000)
     device = get_device()
     valList = []
-    for kth in range(3):
+    for kth in range(cfg["numOfKth"]):
         #info handle stdout to a file
         if stdoutTofile:
             trainLogDir = "./log"
@@ -242,15 +244,6 @@ if __name__ == '__main__':
         
         args = parse_args(str(kth))
         # makeDir(args.save_folder, args.log_dir)
-        cfg = None
-        try:
-            if args.network == "newnasmodel":
-                cfg = cfg_newnasmodel
-            elif args.network == "alexnet":
-                cfg = cfg_alexnet
-        except:
-            print('Retrain Model %s doesn\'t exist!' % (args.network))
-            sys.exit(0)
 
         accelerateByGpuAlgo(cfg["cuddbenchMark"])
         num_classes = cfg["numOfClasses"]
@@ -267,10 +260,10 @@ if __name__ == '__main__':
         initial_lr = args.lr
         gamma = args.gamma
         
-        seed_cpu = 20
+        seed_cpu = seed[str(kth)]
         set_seed_cpu(seed_cpu)
-        testSet = prepareData()
-        testDataLoader = prepareDataLoader(testSet)
+        # testSet = prepareData()
+        # testDataLoader = prepareDataLoader(testSet)
         
 
 
